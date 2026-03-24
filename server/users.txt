@@ -1,0 +1,10 @@
+Found 9 users:
+- Name: undefined, Email: teacherdemo@gmail.com, Role: undefined, School: undefined
+- Name: undefined, Email: teacherlmao@gmail.com, Role: undefined, School: undefined
+- Name: undefined, Email: newteacher@gmail.com, Role: undefined, School: undefined
+- Name: undefined, Email: ramukaka@gmail.com, Role: undefined, School: undefined
+- Name: Test User, Email: test@example.com, Role: Student, School: SOET
+- Name: New Test User, Email: newuser@test.com, Role: Teacher, School: SMAS
+- Name: testuser, Email: testuser@gmail.com, Role: Teacher, School: SOET
+- Name: Sam, Email: sam@gmail.com, Role: Student, School: SOET
+- Name: somctest, Email: somctest@gmail.com, Role: Teacher, School: SOMC

@@ -1,4 +1,4 @@
-# 🎓 CampusConnectCur
+# 🎓 UniSpace
 
 > **A real-time, full-stack campus super-app for students, teachers, and administrators.**  
 > Built with React Native · Expo · TypeScript · Node.js · Express · Socket.io · MongoDB

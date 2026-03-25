@@ -28,6 +28,9 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { SocketProvider } from './src/context/SocketContext';
 
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+import { ToastProvider } from './src/context/ToastContext';
+import LiveConnectionBadge from './src/components/LiveConnectionBadge';
+import RealtimeNotificationBell from './src/components/RealtimeNotificationBell';
 
 const Drawer = createDrawerNavigator();
 const Stack = createNativeStackNavigator();
@@ -55,6 +58,12 @@ function MainDrawer() {
       screenOptions={{
         headerStyle: { backgroundColor: isDark ? '#0f172a' : '#0b1220' },
         headerTintColor: '#fff',
+        headerRight: () => (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, gap: 12 }}>
+            <LiveConnectionBadge />
+            <RealtimeNotificationBell />
+          </View>
+        ),
         drawerActiveBackgroundColor: isDark ? '#1e293b' : '#16233a',
         drawerActiveTintColor: '#dbe5ff',
         drawerInactiveTintColor: isDark ? '#94a3b8' : '#c8d0e0',
@@ -125,6 +134,12 @@ function AdminStack() {
               <Ionicons name="menu" size={24} color="#fff" />
             </TouchableOpacity>
           ),
+          headerRight: () => (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, gap: 12 }}>
+              <LiveConnectionBadge />
+              <RealtimeNotificationBell />
+            </View>
+          ),
         })}
       />
       <Stack.Screen name="AdminTeacherList" component={AdminTeacherListScreen} options={{ title: 'Pending Teachers' }} />
@@ -167,9 +182,11 @@ export default function App() {
     <SafeAreaProvider>
       <AuthProvider>
         <SocketProvider>
-          <ThemeProvider>
-            <RootNavigator />
-          </ThemeProvider>
+          <ToastProvider>
+            <ThemeProvider>
+              <RootNavigator />
+            </ThemeProvider>
+          </ToastProvider>
         </SocketProvider>
       </AuthProvider>
     </SafeAreaProvider>

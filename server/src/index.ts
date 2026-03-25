@@ -10,6 +10,8 @@ import bcrypt from 'bcryptjs';
 import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 import http from 'http';
 import { Server } from 'socket.io';
+import { fetchAllNews, getLiveCache, getLastFetchTime, saveLiveCacheToArchive, runArchiveCleanup, getBreakingNews } from './services/newsService';
+import { NewsArchive, NewsRefreshLog } from './models/News';
 
 dotenv.config();
 
@@ -42,9 +44,50 @@ const io = new Server(server, {
   },
 });
 
+const onlineUsers = new Map();
+
+io.use((socket, next) => {
+  const email = socket.handshake.auth?.email;
+  const role = socket.handshake.auth?.role;
+  if (email && role) {
+    (socket as any).user = { email, role };
+  }
+  next();
+});
+
 io.on('connection', (socket) => {
-  console.log('New client connected:', socket.id);
+  const user = (socket as any).user;
+  
+  if (user) {
+    console.log(`User connected: ${user.email} (${user.role}) [${socket.id}]`);
+    onlineUsers.set(user.email, { email: user.email, role: user.role, socketId: socket.id });
+    
+    socket.join('global');
+    socket.join(`user:${user.email}`);
+
+    if (user.role === 'student') socket.join('students');
+    if (user.role === 'teacher') {
+      socket.join('teachers');
+      socket.join('approval_queue');
+    }
+    if (user.role === 'admin') {
+      socket.join('admins');
+      socket.join('approval_queue');
+    }
+
+    io.to('global').emit('ACTIVE_USERS_UPDATE', Array.from(onlineUsers.values()));
+  } else {
+    console.log('Unauthenticated client connected:', socket.id);
+  }
+
+  socket.on('USER_VIEWING_EVENT', ({ eventId }) => socket.join(`event:${eventId}`));
+  socket.on('USER_LEFT_EVENT', ({ eventId }) => socket.leave(`event:${eventId}`));
+
   socket.on('disconnect', () => {
+    if (user) {
+      onlineUsers.delete(user.email);
+      io.to('global').emit('ACTIVE_USERS_UPDATE', Array.from(onlineUsers.values()));
+    }
     console.log('Client disconnected:', socket.id);
   });
 });
@@ -166,14 +209,41 @@ const ResourceSchema = new mongoose.Schema(
 const EventSchema = new mongoose.Schema(
   {
     title: String,
+    type: { type: String, default: 'Other' }, // Hackathon | Workshop | Seminar | Competition | Other
     date: String,
+    time: String,
     location: String,
+    mode: { type: String, default: 'Offline' }, // Online | Offline | Hybrid
     organizer: String,
-    description: String, // This will be used for "notes"
+    description: String,
     imageUrl: String,
     timings: String,
+    registration_deadline: String,
+    max_participants: Number,
+    contact_name: String,
+    contact_email: String,
+    notes: String,
+    status: { type: String, default: 'approved' }, // pending | approved | rejected | postponed | completed
     school: String,
     createdByEmail: String,
+    createdByRole: String,
+    approvedBy: String,
+    rejectionReason: String,
+    postponeReason: String,
+    newDate: String,
+    newTime: String,
+  },
+  { timestamps: true }
+);
+
+const ApprovalRequestSchema = new mongoose.Schema(
+  {
+    eventId: String,
+    requestedByEmail: String,
+    reviewedByEmail: String,
+    decision: String, // approved | rejected
+    rejectionReason: String,
+    reviewedAt: Date,
   },
   { timestamps: true }
 );
@@ -211,6 +281,7 @@ const Notice = mongoose.model('Notice', NoticeSchema);
 const LostFound = mongoose.model('LostFound', LostFoundSchema);
 const Resource = mongoose.model('Resource', ResourceSchema);
 const Event = mongoose.model('Event', EventSchema);
+const ApprovalRequest = mongoose.model('ApprovalRequest', ApprovalRequestSchema);
 const Group = mongoose.model('Group', GroupSchema);
 
 // Users
@@ -755,30 +826,201 @@ app.delete('/api/groups/:id', async (req, res) => {
 });
 
 app.get('/api/events', async (req, res) => {
-  const { school } = req.query as any;
+  const { school, status } = req.query as any;
   const query: any = {};
   if (school) query.school = school;
+  
+  if (status) {
+    query.status = status;
+  } else {
+    query.status = { $in: ['approved', 'postponed', 'completed'] };
+  }
 
   const items = await Event.find(query).sort({ date: 1 });
   res.json(items);
 });
 
-app.post('/api/events', async (req, res) => {
-  const { title, date, location, organizer, description, imageUrl, timings, school, createdByEmail } = req.body;
+app.get('/api/events/pending', async (req, res) => {
+  const { school } = req.query as any;
+  const query: any = { status: 'pending' };
+  if (school) query.school = school;
+  const items = await Event.find(query).sort({ createdAt: -1 });
+  res.json(items);
+});
 
-  const created = await Event.create({
-    title,
-    date,
-    location,
-    organizer,
-    description,
-    imageUrl,
-    timings,
-    school,
-    createdByEmail
-  });
-  io.emit('event:create', created); // Emit event
+app.get('/api/events/user/:email', async (req, res) => {
+  const items = await Event.find({ createdByEmail: req.params.email }).sort({ createdAt: -1 });
+  res.json(items);
+});
+
+app.post('/api/events/request', async (req, res) => {
+  const item = { ...req.body, status: 'pending', createdByRole: 'student' };
+  const created = await Event.create(item);
+  io.to('approval_queue').emit('APPROVAL_REQUEST_RECEIVED', created);
+  io.to('teachers').emit('NOTIFICATION_NEW', { message: `New event request from ${req.body.createdByEmail}`, type: 'approval_request', eventId: created._id });
+  io.to('admins').emit('NOTIFICATION_NEW', { message: `New event request pending approval`, type: 'approval_request', eventId: created._id });
   res.status(201).json(created);
+});
+
+app.post('/api/events/create', async (req, res) => {
+  const item = { ...req.body, status: 'approved' };
+  const created = await Event.create(item);
+  io.to('eventhub').emit('EVENT_CREATED', created);
+  io.to('global').emit('NOTIFICATION_NEW', { message: `New event "${created.title}" just posted!`, type: 'event', eventId: created._id });
+  res.status(201).json(created);
+});
+
+app.patch('/api/events/:id/approve', async (req, res) => {
+  const { reviewerEmail } = req.body;
+  const event = await Event.findByIdAndUpdate(req.params.id, { status: 'approved', approvedBy: reviewerEmail }, { new: true });
+  if (event) {
+     await ApprovalRequest.create({ eventId: String(event._id), requestedByEmail: event.createdByEmail, reviewedByEmail: reviewerEmail, decision: 'approved', reviewedAt: new Date() });
+     
+     io.to('eventhub').emit('EVENT_CREATED', event);
+     io.to(`user:${event.createdByEmail}`).emit('APPROVAL_APPROVED', { message: `Your event "${event.title}" was approved!`, eventId: event._id });
+     io.to(`user:${event.createdByEmail}`).emit('NOTIFICATION_NEW', { message: `Your event "${event.title}" was approved!`, type: 'approval' });
+     io.to('approval_queue').emit('APPROVAL_QUEUE_UPDATED', event);
+  }
+  res.json(event);
+});
+
+app.patch('/api/events/:id/reject', async (req, res) => {
+  const { reason, reviewerEmail } = req.body;
+  if (!reason || reason.length < 5) return res.status(400).json({ error: 'Valid reason required' });
+  const event = await Event.findByIdAndUpdate(req.params.id, { status: 'rejected', rejectionReason: reason }, { new: true });
+  if (event) {
+     await ApprovalRequest.create({ eventId: String(event._id), requestedByEmail: event.createdByEmail, reviewedByEmail: reviewerEmail, decision: 'rejected', rejectionReason: reason, reviewedAt: new Date() });
+     
+     io.to(`user:${event.createdByEmail}`).emit('APPROVAL_REJECTED', { message: `Your event request was rejected`, reason });
+     io.to(`user:${event.createdByEmail}`).emit('NOTIFICATION_NEW', { message: `Event Request Rejected`, type: 'approval' });
+     io.to('approval_queue').emit('APPROVAL_QUEUE_UPDATED', event);
+  }
+  res.json(event);
+});
+
+app.patch('/api/events/:id/postpone', async (req, res) => {
+  const { newDate, newTime, reason } = req.body;
+  const event = await Event.findByIdAndUpdate(req.params.id, { status: 'postponed', newDate, newTime, postponeReason: reason }, { new: true });
+  if (event) {
+    io.to('eventhub').emit('EVENT_POSTPONED', event);
+    io.to(`event:${event._id}`).emit('EVENT_POSTPONED', { message: 'Event postponed', reason, newDate, newTime });
+  }
+  res.json(event);
+});
+
+app.patch('/api/events/:id', async (req, res) => {
+  const event = await Event.findByIdAndUpdate(req.params.id, req.body, { new: true });
+  if (event) {
+    io.to('eventhub').emit('EVENT_UPDATED', event);
+    io.to(`event:${event._id}`).emit('EVENT_UPDATED', event);
+  }
+  res.json(event);
+});
+
+app.delete('/api/events/:id', async (req, res) => {
+  await Event.findByIdAndDelete(req.params.id);
+  io.to('eventhub').emit('EVENT_DELETED', { eventId: req.params.id });
+  io.to(`event:${req.params.id}`).emit('EVENT_DELETED', { message: 'This event has been cancelled.' });
+  res.json({ ok: true });
+});
+
+// --- News Routes ---
+app.get('/api/news/live', async (req, res) => {
+  const articles = getLiveCache();
+  const lastRefreshed = getLastFetchTime();
+  const secondsElapsed = Math.floor((Date.now() - lastRefreshed) / 1000);
+  const nextRefreshIn = Math.max(0, 60 - secondsElapsed);
+  
+  res.json({
+    articles,
+    total: articles.length,
+    lastRefreshed: lastRefreshed ? new Date(lastRefreshed) : null,
+    nextRefreshIn
+  });
+});
+
+app.get('/api/news/live/stats', async (req, res) => {
+  const totalLive = getLiveCache().length;
+  const totalArchive = await NewsArchive.countDocuments();
+  const lastLogs = await NewsRefreshLog.find().sort({ refreshed_at: -1 }).limit(5);
+  const lastRefreshed = getLastFetchTime();
+  const secondsElapsed = Math.floor((Date.now() - lastRefreshed) / 1000);
+
+  res.json({
+    totalLive,
+    totalArchive,
+    lastRefreshed: lastRefreshed ? new Date(lastRefreshed) : null,
+    nextRefreshIn: Math.max(0, 60 - secondsElapsed),
+    refreshHistory: lastLogs
+  });
+});
+
+app.post('/api/news/refresh', async (req, res) => {
+  try {
+    const { newArticles, updatedArticles, allLive, sourcesActive } = await fetchAllNews(true);
+    io.to('global').emit('NEWS_FEED_UPDATED', {
+      newArticles,
+      updatedArticles,
+      totalNew: newArticles.length,
+      fetchedAt: new Date(),
+      sources: sourcesActive
+    });
+    const breaking = getBreakingNews(newArticles);
+    if (breaking) {
+      io.to('global').emit('NEWS_BREAKING', { article: breaking.article, matchedKeyword: breaking.keyword, timestamp: new Date() });
+    }
+    res.json({ success: true, newCount: newArticles.length, updatedCount: updatedArticles.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/news/archive', async (req, res) => {
+  const { category, source, tag, search, dateFrom, dateTo, sortBy, sortOrder, page = '1', limit = '20' } = req.query as any;
+  const query: any = {};
+  if (category && category !== 'all') query.archive_category = category;
+  if (source && source !== 'all') query.source = source;
+  if (tag) query.tags = tag;
+  if (search) query.$text = { $search: search };
+  
+  if (dateFrom || dateTo) {
+    query.published_at = {};
+    if (dateFrom) query.published_at.$gte = new Date(dateFrom);
+    if (dateTo) query.published_at.$lte = new Date(dateTo);
+  }
+
+  const sortRules: any = {};
+  const sortField = sortBy || 'published_at';
+  sortRules[sortField] = sortOrder === 'asc' ? 1 : -1;
+  
+  const pageNum = parseInt(page, 10);
+  const limitNum = parseInt(limit, 10);
+  
+  const articles = await NewsArchive.find(query)
+    .sort(sortRules)
+    .skip((pageNum - 1) * limitNum)
+    .limit(limitNum);
+    
+  const total = await NewsArchive.countDocuments(query);
+  
+  res.json({
+    articles,
+    pagination: {
+      page: pageNum, limit: limitNum, total,
+      totalPages: Math.ceil(total / limitNum),
+      hasNext: (pageNum * limitNum) < total,
+      hasPrev: pageNum > 1
+    }
+  });
+});
+
+app.get('/api/news/archive/tags', async (req, res) => {
+  const tags = await NewsArchive.aggregate([
+     { $unwind: "$tags" },
+     { $group: { _id: "$tags", count: { $sum: 1 } } },
+     { $sort: { count: -1 } }
+  ]);
+  res.json(tags);
 });
 
 // --- Admin Routes ---
@@ -885,6 +1127,44 @@ async function start() {
   } catch (e) {
     console.warn('Could not enumerate routes', e);
   }
+
+  // Start Ralph Loops: News Engine
+  const REFRESH_INTERVAL = parseInt(process.env.NEWS_REFRESH_INTERVAL_MS || '60000');
+  const ARCHIVE_INTERVAL = parseInt(process.env.NEWS_ARCHIVE_SAVE_INTERVAL_MS || '300000');
+  const CLEANUP_INTERVAL = parseInt(process.env.NEWS_CLEANUP_INTERVAL_MS || '3600000');
+  
+  setInterval(async () => {
+    try {
+      const { newArticles, updatedArticles, sourcesActive } = await fetchAllNews(true);
+      if (newArticles.length > 0 || updatedArticles.length > 0) {
+        io.to('global').emit('NEWS_FEED_UPDATED', {
+          newArticles, updatedArticles, totalNew: newArticles.length, fetchedAt: new Date(), sources: sourcesActive
+        });
+        const breaking = getBreakingNews(newArticles);
+        if (breaking) {
+          io.to('global').emit('NEWS_BREAKING', { article: breaking.article, matchedKeyword: breaking.keyword, timestamp: new Date() });
+        }
+      }
+    } catch(e) {
+      console.error('LIVE_NEWS_LOOP failed', e);
+    }
+  }, REFRESH_INTERVAL);
+
+  setInterval(() => saveLiveCacheToArchive(), ARCHIVE_INTERVAL);
+  setInterval(() => runArchiveCleanup(), CLEANUP_INTERVAL);
+  
+  setInterval(() => {
+    const lastFetch = getLastFetchTime();
+    if (lastFetch > 0) {
+      const secondsElapsed = (Date.now() - lastFetch) / 1000;
+      io.to('global').emit('NEWS_REFRESH_COUNTDOWN', {
+        secondsUntilRefresh: Math.max(0, 60 - Math.round(secondsElapsed)),
+        lastRefreshed: new Date(lastFetch)
+      });
+    }
+  }, 10000);
+  
+  fetchAllNews(true).then(() => saveLiveCacheToArchive()).catch(console.error);
 
   // Use server.listen instead of app.listen
   server.listen(PORT, () => console.log(`API running on http://localhost:${PORT}`));

@@ -54,7 +54,7 @@
 - 🔍 **Lost & Found** — Report and claim lost items with real-time status updates.
 - 📁 **Resource Library** — Searchable academic PDFs by subject, year, and department.
 - 🔔 **Notification Bell** — Persistent in-app notification centre with toast alerts.
-- 🌙 **Dark Mode** — Full system-wide dark/light theme support/help.
+- 🌙 **Dark Mode** — Full system-wide dark/light theme support.
 
 ---
 

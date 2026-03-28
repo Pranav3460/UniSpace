@@ -257,7 +257,7 @@ APPROVAL_APPROVED → creator's private room
 ## 4. Project Structure
 
 ```
-CampusConnectCur/
+UniSpace/
 ├── App.tsx                         # Root navigation: AuthStack + MainDrawer
 ├── index.ts                        # Expo entry point
 ├── app.json                        # Expo config (name, icons, android package)

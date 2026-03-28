@@ -10,8 +10,6 @@ import bcrypt from 'bcryptjs';
 import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 import http from 'http';
 import { Server } from 'socket.io';
-import { fetchAllNews, getLiveCache, getLastFetchTime, saveLiveCacheToArchive, runArchiveCleanup, getBreakingNews } from './services/newsService';
-import { NewsArchive, NewsRefreshLog } from './models/News';
 
 dotenv.config();
 
@@ -44,50 +42,9 @@ const io = new Server(server, {
   },
 });
 
-const onlineUsers = new Map();
-
-io.use((socket, next) => {
-  const email = socket.handshake.auth?.email;
-  const role = socket.handshake.auth?.role;
-  if (email && role) {
-    (socket as any).user = { email, role };
-  }
-  next();
-});
-
 io.on('connection', (socket) => {
-  const user = (socket as any).user;
-  
-  if (user) {
-    console.log(`User connected: ${user.email} (${user.role}) [${socket.id}]`);
-    onlineUsers.set(user.email, { email: user.email, role: user.role, socketId: socket.id });
-    
-    socket.join('global');
-    socket.join(`user:${user.email}`);
-
-    if (user.role === 'student') socket.join('students');
-    if (user.role === 'teacher') {
-      socket.join('teachers');
-      socket.join('approval_queue');
-    }
-    if (user.role === 'admin') {
-      socket.join('admins');
-      socket.join('approval_queue');
-    }
-
-    io.to('global').emit('ACTIVE_USERS_UPDATE', Array.from(onlineUsers.values()));
-  } else {
-    console.log('Unauthenticated client connected:', socket.id);
-  }
-
-  socket.on('USER_VIEWING_EVENT', ({ eventId }) => socket.join(`event:${eventId}`));
-  socket.on('USER_LEFT_EVENT', ({ eventId }) => socket.leave(`event:${eventId}`));
-
+  console.log('New client connected:', socket.id);
   socket.on('disconnect', () => {
-    if (user) {
-      onlineUsers.delete(user.email);
-      io.to('global').emit('ACTIVE_USERS_UPDATE', Array.from(onlineUsers.values()));
-    }
     console.log('Client disconnected:', socket.id);
   });
 });
@@ -209,41 +166,56 @@ const ResourceSchema = new mongoose.Schema(
 const EventSchema = new mongoose.Schema(
   {
     title: String,
-    type: { type: String, default: 'Other' }, // Hackathon | Workshop | Seminar | Competition | Other
     date: String,
-    time: String,
     location: String,
-    mode: { type: String, default: 'Offline' }, // Online | Offline | Hybrid
     organizer: String,
     description: String,
     imageUrl: String,
     timings: String,
-    registration_deadline: String,
-    max_participants: Number,
-    contact_name: String,
-    contact_email: String,
-    notes: String,
-    status: { type: String, default: 'approved' }, // pending | approved | rejected | postponed | completed
     school: String,
     createdByEmail: String,
+  },
+  { timestamps: true }
+);
+
+// ─── Event Hub Schema (new full-featured events) ───
+const HubEventSchema = new mongoose.Schema(
+  {
+    title: { type: String, required: true },
+    type: { type: String, enum: ['Hackathon', 'Workshop', 'Seminar', 'Competition', 'Other'], default: 'Other' },
+    description: String,
+    date: { type: Date, required: true },
+    time: String,
+    schools: [String],
+    mode: { type: String, enum: ['Online', 'Offline', 'Hybrid'], default: 'Offline' },
+    registrationDeadline: Date,
+    maxParticipants: Number,
+    contactName: String,
+    contactEmail: String,
+    notes: String,
+    imageUrl: String,
+    status: { type: String, enum: ['pending', 'approved', 'rejected', 'postponed', 'completed'], default: 'approved' },
+    createdByEmail: { type: String, required: true },
+    createdByName: String,
     createdByRole: String,
     approvedBy: String,
     rejectionReason: String,
     postponeReason: String,
-    newDate: String,
+    newDate: Date,
     newTime: String,
   },
   { timestamps: true }
 );
 
-const ApprovalRequestSchema = new mongoose.Schema(
+// ─── Notification Schema ───
+const NotificationSchema = new mongoose.Schema(
   {
-    eventId: String,
-    requestedByEmail: String,
-    reviewedByEmail: String,
-    decision: String, // approved | rejected
-    rejectionReason: String,
-    reviewedAt: Date,
+    recipientEmail: { type: String, required: true, index: true },
+    type: { type: String, enum: ['event_request', 'event_approved', 'event_rejected', 'event_postponed'], required: true },
+    title: String,
+    message: String,
+    relatedEventId: { type: mongoose.Schema.Types.ObjectId, ref: 'HubEvent' },
+    read: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
@@ -281,7 +253,8 @@ const Notice = mongoose.model('Notice', NoticeSchema);
 const LostFound = mongoose.model('LostFound', LostFoundSchema);
 const Resource = mongoose.model('Resource', ResourceSchema);
 const Event = mongoose.model('Event', EventSchema);
-const ApprovalRequest = mongoose.model('ApprovalRequest', ApprovalRequestSchema);
+const HubEvent = mongoose.model('HubEvent', HubEventSchema);
+const Notification = mongoose.model('Notification', NotificationSchema);
 const Group = mongoose.model('Group', GroupSchema);
 
 // Users
@@ -826,204 +799,416 @@ app.delete('/api/groups/:id', async (req, res) => {
 });
 
 app.get('/api/events', async (req, res) => {
-  const { school, status } = req.query as any;
+  const { school } = req.query as any;
   const query: any = {};
   if (school) query.school = school;
-  
-  if (status) {
-    query.status = status;
-  } else {
-    query.status = { $in: ['approved', 'postponed', 'completed'] };
-  }
 
   const items = await Event.find(query).sort({ date: 1 });
   res.json(items);
 });
 
-app.get('/api/events/pending', async (req, res) => {
-  const { school } = req.query as any;
-  const query: any = { status: 'pending' };
-  if (school) query.school = school;
-  const items = await Event.find(query).sort({ createdAt: -1 });
-  res.json(items);
-});
+app.post('/api/events', async (req, res) => {
+  const { title, date, location, organizer, description, imageUrl, timings, school, createdByEmail } = req.body;
 
-app.get('/api/events/user/:email', async (req, res) => {
-  const items = await Event.find({ createdByEmail: req.params.email }).sort({ createdAt: -1 });
-  res.json(items);
-});
-
-app.post('/api/events/request', async (req, res) => {
-  const item = { ...req.body, status: 'pending', createdByRole: 'student' };
-  const created = await Event.create(item);
-  io.to('approval_queue').emit('APPROVAL_REQUEST_RECEIVED', created);
-  io.to('teachers').emit('NOTIFICATION_NEW', { message: `New event request from ${req.body.createdByEmail}`, type: 'approval_request', eventId: created._id });
-  io.to('admins').emit('NOTIFICATION_NEW', { message: `New event request pending approval`, type: 'approval_request', eventId: created._id });
+  const created = await Event.create({
+    title,
+    date,
+    location,
+    organizer,
+    description,
+    imageUrl,
+    timings,
+    school,
+    createdByEmail
+  });
+  io.emit('event:create', created);
   res.status(201).json(created);
 });
 
-app.post('/api/events/create', async (req, res) => {
-  const item = { ...req.body, status: 'approved' };
-  const created = await Event.create(item);
-  io.to('eventhub').emit('EVENT_CREATED', created);
-  io.to('global').emit('NOTIFICATION_NEW', { message: `New event "${created.title}" just posted!`, type: 'event', eventId: created._id });
-  res.status(201).json(created);
-});
+// ═══════════════════════════════════════════════
+//  EVENT HUB API ROUTES
+// ═══════════════════════════════════════════════
 
-app.patch('/api/events/:id/approve', async (req, res) => {
-  const { reviewerEmail } = req.body;
-  const event = await Event.findByIdAndUpdate(req.params.id, { status: 'approved', approvedBy: reviewerEmail }, { new: true });
-  if (event) {
-     await ApprovalRequest.create({ eventId: String(event._id), requestedByEmail: event.createdByEmail, reviewedByEmail: reviewerEmail, decision: 'approved', reviewedAt: new Date() });
-     
-     io.to('eventhub').emit('EVENT_CREATED', event);
-     io.to(`user:${event.createdByEmail}`).emit('APPROVAL_APPROVED', { message: `Your event "${event.title}" was approved!`, eventId: event._id });
-     io.to(`user:${event.createdByEmail}`).emit('NOTIFICATION_NEW', { message: `Your event "${event.title}" was approved!`, type: 'approval' });
-     io.to('approval_queue').emit('APPROVAL_QUEUE_UPDATED', event);
-  }
-  res.json(event);
-});
-
-app.patch('/api/events/:id/reject', async (req, res) => {
-  const { reason, reviewerEmail } = req.body;
-  if (!reason || reason.length < 5) return res.status(400).json({ error: 'Valid reason required' });
-  const event = await Event.findByIdAndUpdate(req.params.id, { status: 'rejected', rejectionReason: reason }, { new: true });
-  if (event) {
-     await ApprovalRequest.create({ eventId: String(event._id), requestedByEmail: event.createdByEmail, reviewedByEmail: reviewerEmail, decision: 'rejected', rejectionReason: reason, reviewedAt: new Date() });
-     
-     io.to(`user:${event.createdByEmail}`).emit('APPROVAL_REJECTED', { message: `Your event request was rejected`, reason });
-     io.to(`user:${event.createdByEmail}`).emit('NOTIFICATION_NEW', { message: `Event Request Rejected`, type: 'approval' });
-     io.to('approval_queue').emit('APPROVAL_QUEUE_UPDATED', event);
-  }
-  res.json(event);
-});
-
-app.patch('/api/events/:id/postpone', async (req, res) => {
-  const { newDate, newTime, reason } = req.body;
-  const event = await Event.findByIdAndUpdate(req.params.id, { status: 'postponed', newDate, newTime, postponeReason: reason }, { new: true });
-  if (event) {
-    io.to('eventhub').emit('EVENT_POSTPONED', event);
-    io.to(`event:${event._id}`).emit('EVENT_POSTPONED', { message: 'Event postponed', reason, newDate, newTime });
-  }
-  res.json(event);
-});
-
-app.patch('/api/events/:id', async (req, res) => {
-  const event = await Event.findByIdAndUpdate(req.params.id, req.body, { new: true });
-  if (event) {
-    io.to('eventhub').emit('EVENT_UPDATED', event);
-    io.to(`event:${event._id}`).emit('EVENT_UPDATED', event);
-  }
-  res.json(event);
-});
-
-app.delete('/api/events/:id', async (req, res) => {
-  await Event.findByIdAndDelete(req.params.id);
-  io.to('eventhub').emit('EVENT_DELETED', { eventId: req.params.id });
-  io.to(`event:${req.params.id}`).emit('EVENT_DELETED', { message: 'This event has been cancelled.' });
-  res.json({ ok: true });
-});
-
-// --- News Routes ---
-app.get('/api/news/live', async (req, res) => {
-  const articles = getLiveCache();
-  const lastRefreshed = getLastFetchTime();
-  const secondsElapsed = Math.floor((Date.now() - lastRefreshed) / 1000);
-  const nextRefreshIn = Math.max(0, 60 - secondsElapsed);
-  
-  res.json({
-    articles,
-    total: articles.length,
-    lastRefreshed: lastRefreshed ? new Date(lastRefreshed) : null,
-    nextRefreshIn
+// Helper: create notifications for all teachers + admins
+async function notifyReviewers(eventDoc: any, type: string, title: string, message: string) {
+  const reviewers = await User.find({ $or: [{ role: 'teacher', status: 'approved' }, { role: 'admin' }] });
+  const notifications = reviewers.map((u) => ({
+    recipientEmail: u.email,
+    type,
+    title,
+    message,
+    relatedEventId: eventDoc._id,
+  }));
+  await Notification.insertMany(notifications);
+  // Emit socket event for real-time bell update
+  reviewers.forEach((u) => {
+    io.emit(`notification:${u.email}`, { type, title, message, eventId: eventDoc._id });
   });
-});
+}
 
-app.get('/api/news/live/stats', async (req, res) => {
-  const totalLive = getLiveCache().length;
-  const totalArchive = await NewsArchive.countDocuments();
-  const lastLogs = await NewsRefreshLog.find().sort({ refreshed_at: -1 }).limit(5);
-  const lastRefreshed = getLastFetchTime();
-  const secondsElapsed = Math.floor((Date.now() - lastRefreshed) / 1000);
-
-  res.json({
-    totalLive,
-    totalArchive,
-    lastRefreshed: lastRefreshed ? new Date(lastRefreshed) : null,
-    nextRefreshIn: Math.max(0, 60 - secondsElapsed),
-    refreshHistory: lastLogs
-  });
-});
-
-app.post('/api/news/refresh', async (req, res) => {
+// GET /api/events/hub — all approved + postponed events (public feed)
+app.get('/api/events/hub', async (req, res) => {
   try {
-    const { newArticles, updatedArticles, allLive, sourcesActive } = await fetchAllNews(true);
-    io.to('global').emit('NEWS_FEED_UPDATED', {
-      newArticles,
-      updatedArticles,
-      totalNew: newArticles.length,
-      fetchedAt: new Date(),
-      sources: sourcesActive
+    const { type, status, school, search } = req.query as any;
+    const query: any = { status: { $in: ['approved', 'postponed', 'completed'] } };
+    if (type) query.type = type;
+    if (status && ['approved', 'postponed', 'completed'].includes(status)) query.status = status;
+    if (school) query.schools = school;
+    if (search) query.title = { $regex: search, $options: 'i' };
+
+    const events = await HubEvent.find(query).sort({ date: -1 });
+    res.json(events);
+  } catch (e) {
+    console.error('Error fetching hub events', e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/events/pending — approval queue (teachers + admins only)
+app.get('/api/events/pending', async (req, res) => {
+  try {
+    const { requesterEmail } = req.query as any;
+    if (!requesterEmail) return res.status(400).json({ error: 'Missing requesterEmail' });
+
+    const user = await User.findOne({ email: requesterEmail });
+    if (!user || (user.role !== 'teacher' && user.role !== 'admin')) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const pending = await HubEvent.find({ status: 'pending' }).sort({ createdAt: -1 });
+    res.json(pending);
+  } catch (e) {
+    console.error('Error fetching pending events', e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/events/my-requests — student's own requests
+app.get('/api/events/my-requests', async (req, res) => {
+  try {
+    const { email } = req.query as any;
+    if (!email) return res.status(400).json({ error: 'Missing email' });
+    const events = await HubEvent.find({ createdByEmail: email }).sort({ createdAt: -1 });
+    res.json(events);
+  } catch (e) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/events/create — teacher/admin creates directly (instant publish)
+app.post('/api/events/create', async (req, res) => {
+  try {
+    const { createdByEmail, ...eventData } = req.body;
+    if (!createdByEmail) return res.status(400).json({ error: 'Missing createdByEmail' });
+
+    const user = await User.findOne({ email: createdByEmail });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    if (user.role !== 'teacher' && user.role !== 'admin') {
+      return res.status(403).json({ error: 'Students must use /api/events/request' });
+    }
+
+    const hubEvent = await HubEvent.create({
+      ...eventData,
+      createdByEmail,
+      createdByName: user.name || createdByEmail,
+      createdByRole: user.role,
+      status: 'approved',
     });
-    const breaking = getBreakingNews(newArticles);
-    if (breaking) {
-      io.to('global').emit('NEWS_BREAKING', { article: breaking.article, matchedKeyword: breaking.keyword, timestamp: new Date() });
-    }
-    res.json({ success: true, newCount: newArticles.length, updatedCount: updatedArticles.length });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+
+    io.emit('hub-event:create', hubEvent);
+    res.status(201).json(hubEvent);
+  } catch (e) {
+    console.error('Error creating hub event', e);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
-app.get('/api/news/archive', async (req, res) => {
-  const { category, source, tag, search, dateFrom, dateTo, sortBy, sortOrder, page = '1', limit = '20' } = req.query as any;
-  const query: any = {};
-  if (category && category !== 'all') query.archive_category = category;
-  if (source && source !== 'all') query.source = source;
-  if (tag) query.tags = tag;
-  if (search) query.$text = { $search: search };
-  
-  if (dateFrom || dateTo) {
-    query.published_at = {};
-    if (dateFrom) query.published_at.$gte = new Date(dateFrom);
-    if (dateTo) query.published_at.$lte = new Date(dateTo);
+// POST /api/events/request — student submits event for approval
+app.post('/api/events/request', async (req, res) => {
+  try {
+    const { createdByEmail, ...eventData } = req.body;
+    if (!createdByEmail) return res.status(400).json({ error: 'Missing createdByEmail' });
+
+    const user = await User.findOne({ email: createdByEmail });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const hubEvent = await HubEvent.create({
+      ...eventData,
+      createdByEmail,
+      createdByName: user.name || createdByEmail,
+      createdByRole: user.role || 'student',
+      status: 'pending',
+    });
+
+    // Notify all teachers + admins
+    await notifyReviewers(
+      hubEvent,
+      'event_request',
+      'New Event Request',
+      `${user.name || createdByEmail} has submitted "${hubEvent.title}" for approval.`
+    );
+
+    io.emit('hub-event:request', hubEvent);
+    res.status(201).json(hubEvent);
+  } catch (e) {
+    console.error('Error creating event request', e);
+    res.status(500).json({ error: 'Server error' });
   }
+});
 
-  const sortRules: any = {};
-  const sortField = sortBy || 'published_at';
-  sortRules[sortField] = sortOrder === 'asc' ? 1 : -1;
-  
-  const pageNum = parseInt(page, 10);
-  const limitNum = parseInt(limit, 10);
-  
-  const articles = await NewsArchive.find(query)
-    .sort(sortRules)
-    .skip((pageNum - 1) * limitNum)
-    .limit(limitNum);
-    
-  const total = await NewsArchive.countDocuments(query);
-  
-  res.json({
-    articles,
-    pagination: {
-      page: pageNum, limit: limitNum, total,
-      totalPages: Math.ceil(total / limitNum),
-      hasNext: (pageNum * limitNum) < total,
-      hasPrev: pageNum > 1
+// PATCH /api/events/:id/approve — approve a pending event
+app.patch('/api/events/:id/approve', async (req, res) => {
+  try {
+    const { approverEmail } = req.body;
+    if (!approverEmail) return res.status(400).json({ error: 'Missing approverEmail' });
+
+    const approver = await User.findOne({ email: approverEmail });
+    if (!approver || (approver.role !== 'teacher' && approver.role !== 'admin')) {
+      return res.status(403).json({ error: 'Forbidden' });
     }
-  });
+
+    const hubEvent = await HubEvent.findById(req.params.id);
+    if (!hubEvent) return res.status(404).json({ error: 'Event not found' });
+    if (hubEvent.status !== 'pending') return res.status(400).json({ error: 'Event is not pending' });
+
+    hubEvent.status = 'approved';
+    hubEvent.approvedBy = approverEmail;
+    await hubEvent.save();
+
+    // Notify the student who created it
+    await Notification.create({
+      recipientEmail: hubEvent.createdByEmail,
+      type: 'event_approved',
+      title: 'Event Approved! 🎉',
+      message: `Your event "${hubEvent.title}" has been approved by ${approver.name || approverEmail}.`,
+      relatedEventId: hubEvent._id,
+    });
+    io.emit(`notification:${hubEvent.createdByEmail}`, { type: 'event_approved', title: hubEvent.title });
+
+    io.emit('hub-event:update', hubEvent);
+    res.json(hubEvent);
+  } catch (e) {
+    console.error('Error approving event', e);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
-app.get('/api/news/archive/tags', async (req, res) => {
-  const tags = await NewsArchive.aggregate([
-     { $unwind: "$tags" },
-     { $group: { _id: "$tags", count: { $sum: 1 } } },
-     { $sort: { count: -1 } }
-  ]);
-  res.json(tags);
+// PATCH /api/events/:id/reject — reject with mandatory reason
+app.patch('/api/events/:id/reject', async (req, res) => {
+  try {
+    const { approverEmail, reason } = req.body;
+    if (!approverEmail) return res.status(400).json({ error: 'Missing approverEmail' });
+    if (!reason || !reason.trim()) return res.status(400).json({ error: 'Rejection reason is mandatory' });
+
+    const approver = await User.findOne({ email: approverEmail });
+    if (!approver || (approver.role !== 'teacher' && approver.role !== 'admin')) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const hubEvent = await HubEvent.findById(req.params.id);
+    if (!hubEvent) return res.status(404).json({ error: 'Event not found' });
+    if (hubEvent.status !== 'pending') return res.status(400).json({ error: 'Event is not pending' });
+
+    hubEvent.status = 'rejected';
+    hubEvent.approvedBy = approverEmail;
+    hubEvent.rejectionReason = reason.trim();
+    await hubEvent.save();
+
+    // Notify the student
+    await Notification.create({
+      recipientEmail: hubEvent.createdByEmail,
+      type: 'event_rejected',
+      title: 'Event Rejected',
+      message: `Your event "${hubEvent.title}" was rejected. Reason: ${reason.trim()}`,
+      relatedEventId: hubEvent._id,
+    });
+    io.emit(`notification:${hubEvent.createdByEmail}`, { type: 'event_rejected', title: hubEvent.title, reason: reason.trim() });
+
+    io.emit('hub-event:update', hubEvent);
+    res.json(hubEvent);
+  } catch (e) {
+    console.error('Error rejecting event', e);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
-// --- Admin Routes ---
+// PATCH /api/events/:id/postpone — admin postpones event
+app.patch('/api/events/:id/postpone', async (req, res) => {
+  try {
+    const { requesterEmail, newDate, newTime, reason } = req.body;
+    if (!requesterEmail) return res.status(400).json({ error: 'Missing requesterEmail' });
+
+    const user = await User.findOne({ email: requesterEmail });
+    if (!user || user.role !== 'admin') {
+      return res.status(403).json({ error: 'Only Global Admins can postpone events' });
+    }
+
+    const hubEvent = await HubEvent.findById(req.params.id);
+    if (!hubEvent) return res.status(404).json({ error: 'Event not found' });
+
+    hubEvent.status = 'postponed';
+    hubEvent.postponeReason = reason || '';
+    hubEvent.newDate = newDate ? new Date(newDate) : null;
+    hubEvent.newTime = newTime || '';
+    await hubEvent.save();
+
+    // Notify event creator
+    await Notification.create({
+      recipientEmail: hubEvent.createdByEmail,
+      type: 'event_postponed',
+      title: 'Event Postponed',
+      message: `Your event "${hubEvent.title}" has been postponed. ${reason ? 'Reason: ' + reason : ''}`,
+      relatedEventId: hubEvent._id,
+    });
+    io.emit(`notification:${hubEvent.createdByEmail}`, { type: 'event_postponed', title: hubEvent.title });
+
+    io.emit('hub-event:update', hubEvent);
+    res.json(hubEvent);
+  } catch (e) {
+    console.error('Error postponing event', e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PATCH /api/events/:id/edit — admin edits event
+app.patch('/api/events/:id/edit', async (req, res) => {
+  try {
+    const { requesterEmail, ...updates } = req.body;
+    if (!requesterEmail) return res.status(400).json({ error: 'Missing requesterEmail' });
+
+    const user = await User.findOne({ email: requesterEmail });
+    if (!user || user.role !== 'admin') {
+      return res.status(403).json({ error: 'Only Global Admins can edit events' });
+    }
+
+    const hubEvent = await HubEvent.findByIdAndUpdate(req.params.id, updates, { new: true });
+    if (!hubEvent) return res.status(404).json({ error: 'Event not found' });
+
+    io.emit('hub-event:update', hubEvent);
+    res.json(hubEvent);
+  } catch (e) {
+    console.error('Error editing event', e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// DELETE /api/events/:id/hub — admin deletes event
+app.delete('/api/events/:id/hub', async (req, res) => {
+  try {
+    const { requesterEmail } = req.query as any;
+    if (!requesterEmail) return res.status(400).json({ error: 'Missing requesterEmail' });
+
+    const user = await User.findOne({ email: requesterEmail });
+    if (!user || user.role !== 'admin') {
+      return res.status(403).json({ error: 'Only Global Admins can delete events' });
+    }
+
+    const deleted = await HubEvent.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ error: 'Event not found' });
+
+    io.emit('hub-event:delete', req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Error deleting hub event', e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ─── Notification Routes ───
+
+// GET /api/notifications — get user notifications
+app.get('/api/notifications', async (req, res) => {
+  try {
+    const { email } = req.query as any;
+    if (!email) return res.status(400).json({ error: 'Missing email' });
+    const items = await Notification.find({ recipientEmail: email }).sort({ createdAt: -1 }).limit(50);
+    res.json(items);
+  } catch (e) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/notifications/unread-count
+app.get('/api/notifications/unread-count', async (req, res) => {
+  try {
+    const { email } = req.query as any;
+    if (!email) return res.status(400).json({ error: 'Missing email' });
+    const count = await Notification.countDocuments({ recipientEmail: email, read: false });
+    res.json({ count });
+  } catch (e) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PATCH /api/notifications/:id/read
+app.patch('/api/notifications/:id/read', async (req, res) => {
+  try {
+    const n = await Notification.findByIdAndUpdate(req.params.id, { read: true }, { new: true });
+    if (!n) return res.status(404).json({ error: 'Not found' });
+    res.json(n);
+  } catch (e) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PATCH /api/notifications/read-all
+app.patch('/api/notifications/read-all', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Missing email' });
+    await Notification.updateMany({ recipientEmail: email, read: false }, { read: true });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ─── Tech News Proxy (Hacker News API — no key required) ───
+let newsCache: { data: any[]; fetchedAt: number } = { data: [], fetchedAt: 0 };
+const NEWS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+app.get('/api/technews', async (_req, res) => {
+  try {
+    const now = Date.now();
+    if (newsCache.data.length > 0 && now - newsCache.fetchedAt < NEWS_CACHE_TTL) {
+      return res.json(newsCache.data);
+    }
+
+    // Fetch top story IDs
+    const idsResponse = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json');
+    const ids: number[] = await idsResponse.json();
+    const top20 = ids.slice(0, 20);
+
+    // Fetch each story
+    const stories = await Promise.all(
+      top20.map(async (id) => {
+        const storyRes = await fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`);
+        const story = await storyRes.json();
+        return {
+          id: story.id,
+          title: story.title,
+          url: story.url || `https://news.ycombinator.com/item?id=${story.id}`,
+          source: story.url ? new URL(story.url).hostname.replace('www.', '') : 'news.ycombinator.com',
+          description: story.text ? story.text.substring(0, 200).replace(/<[^>]*>/g, '') : '',
+          date: new Date(story.time * 1000).toISOString(),
+          score: story.score,
+          comments: story.descendants || 0,
+        };
+      })
+    );
+
+    newsCache = { data: stories, fetchedAt: now };
+    res.json(stories);
+  } catch (e) {
+    console.error('Error fetching tech news', e);
+    // Return cache even if stale
+    if (newsCache.data.length > 0) return res.json(newsCache.data);
+    res.status(500).json({ error: 'Failed to fetch news' });
+  }
+});
+
+
 
 // Get all teachers (pending or all)
 app.get('/api/admin/teachers', async (req, res) => {
@@ -1127,44 +1312,6 @@ async function start() {
   } catch (e) {
     console.warn('Could not enumerate routes', e);
   }
-
-  // Start Ralph Loops: News Engine
-  const REFRESH_INTERVAL = parseInt(process.env.NEWS_REFRESH_INTERVAL_MS || '60000');
-  const ARCHIVE_INTERVAL = parseInt(process.env.NEWS_ARCHIVE_SAVE_INTERVAL_MS || '300000');
-  const CLEANUP_INTERVAL = parseInt(process.env.NEWS_CLEANUP_INTERVAL_MS || '3600000');
-  
-  setInterval(async () => {
-    try {
-      const { newArticles, updatedArticles, sourcesActive } = await fetchAllNews(true);
-      if (newArticles.length > 0 || updatedArticles.length > 0) {
-        io.to('global').emit('NEWS_FEED_UPDATED', {
-          newArticles, updatedArticles, totalNew: newArticles.length, fetchedAt: new Date(), sources: sourcesActive
-        });
-        const breaking = getBreakingNews(newArticles);
-        if (breaking) {
-          io.to('global').emit('NEWS_BREAKING', { article: breaking.article, matchedKeyword: breaking.keyword, timestamp: new Date() });
-        }
-      }
-    } catch(e) {
-      console.error('LIVE_NEWS_LOOP failed', e);
-    }
-  }, REFRESH_INTERVAL);
-
-  setInterval(() => saveLiveCacheToArchive(), ARCHIVE_INTERVAL);
-  setInterval(() => runArchiveCleanup(), CLEANUP_INTERVAL);
-  
-  setInterval(() => {
-    const lastFetch = getLastFetchTime();
-    if (lastFetch > 0) {
-      const secondsElapsed = (Date.now() - lastFetch) / 1000;
-      io.to('global').emit('NEWS_REFRESH_COUNTDOWN', {
-        secondsUntilRefresh: Math.max(0, 60 - Math.round(secondsElapsed)),
-        lastRefreshed: new Date(lastFetch)
-      });
-    }
-  }, 10000);
-  
-  fetchAllNews(true).then(() => saveLiveCacheToArchive()).catch(console.error);
 
   // Use server.listen instead of app.listen
   server.listen(PORT, () => console.log(`API running on http://localhost:${PORT}`));

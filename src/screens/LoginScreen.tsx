@@ -41,7 +41,7 @@ export default function LoginScreen({ navigation }: any) {
           styles.contentContainer,
           isDesktop && styles.cardDesktop
         ]}>
-          <Text style={styles.header}>Login to UniSpace</Text>
+          <Text style={styles.header}>Login to CampusConnect</Text>
           <View style={styles.heroWrap}>
             <Image
               source={COLLEGE_IMG}
@@ -49,7 +49,7 @@ export default function LoginScreen({ navigation }: any) {
               resizeMode="cover"
             />
           </View>
-          <Text style={styles.welcome}>Welcome to UniSpace</Text>
+          <Text style={styles.welcome}>Welcome to CampusConnect</Text>
           <TextInput
             placeholder="Email or Student ID"
             value={email}

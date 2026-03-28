@@ -242,18 +242,16 @@ MongoDB Atlas (Cloud Cluster Network) interacting flawlessly via URI protocols h
 
 ## 4. Project Structure
 
-Real structural topology verified from internal scanning heuristics:
-
-```plaintext
+```
 UniSpace/
-├── App.tsx                         # Core Navigation Initialization (AuthStack/AppDrawer)
-├── README.md                       # Extremely detailed application documentation
-├── CHANGELOG.md                    # Explicit version control feature maps
-├── app.json                        # Expo initialization configs natively
-├── package.json                    # Application metadata and deps orchestrator
-├── tsconfig.json                   # TS Compiler enforcement mapping logic
-├── metro.config.js                 # Metro Asset builder orchestrations
-├── assets/                         # Vector Icons and PNG splash assets natively mapped
+├── App.tsx                         # Root navigation: AuthStack + MainDrawer
+├── index.ts                        # Expo entry point
+├── app.json                        # Expo config (name, icons, android package)
+├── package.json                    # Frontend dependencies & scripts
+├── tsconfig.json                   # TypeScript config (strict mode)
+├── babel.config.js                 # Babel transpiler config
+├── metro.config.js                 # Metro bundler config
+├── assets/                         # Icons, splash, adaptive icons
 │
 ├── src/
 │   ├── api/

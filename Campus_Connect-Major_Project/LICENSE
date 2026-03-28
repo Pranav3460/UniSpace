@@ -1,0 +1,152 @@
+🚀 CampusConnect – The Ultimate Modular College Utility Web App
+
+🎯 Objective:
+
+A centralised digital platform that simplifies campus life by combining essential tools for communication, collaboration, and convenience — all in one place.
+
+
+---
+
+🔧 Tech Stack
+
+Frontend: React.js + Tailwind CSS
+
+Backend: Firebase (Firestore + Storage + Auth)
+
+Hosting: Firebase Hosting / Vercel
+
+Real-Time Features: Firebase real-time listener / Socket.io 
+
+
+
+---
+
+🧩 Core Modules (Features)
+
+
+---
+
+1️⃣ Smart Notice Board
+
+> A digital, department-wise notice board with filters and real-time updates.
+
+
+
+✅ Key Features:
+
+Upload & manage notices by admin
+
+Filters: Department, Year, Notice Type (Exam, Event, General, etc.)
+
+Keyword Search
+
+PDF/image preview
+
+QR code generator for every notice
+
+
+
+---
+
+2️⃣  Lost & Found
+
+> Intelligent lost and found portal using natural language processing to suggest potential item matches.
+
+
+
+✅ Key Features:
+
+Students can post lost or found items with description, image, location
+
+match suggestion (based on similarity of descriptions)
+
+Claim/Resolve feature when item is returned
+
+Status-based filter (Active, Claimed)
+
+
+
+---
+
+3️⃣ Study Group Hub
+
+> A collaborative space for students to connect via subject-specific discussion groups.
+
+
+
+✅ Key Features:
+
+Create or join subject-wise groups
+
+Real-time chat with group members
+
+Share PDFs, notes, links in group
+
+Member list with visibility of creator/admin
+
+
+
+---
+
+4️⃣ Resource Finder
+
+> A curated, searchable library of notes, previous year papers, circulars, and important documents.
+
+
+
+✅ Key Features:
+
+Upload PDF resources (department/subject tagged)
+
+Search by subject, year, tags, or title
+
+Preview documents directly inside browser (PDF.js)
+
+Sort by date or popularity
+
+
+
+---
+
+5️⃣ Event Calendar
+
+> A visual calendar showcasing all campus-related events and activities.
+
+
+
+✅ Key Features:
+
+Add, view, and manage upcoming events
+
+Calendar views: Day, Week, Month
+
+Event detail modal with date, location, organizer info
+
+“Add to Google Calendar” option
+
+Event reminders (optional via email or FCM)
+
+
+
+
+MIT License
+
+Copyright (c) 2025 Aman Shukla
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

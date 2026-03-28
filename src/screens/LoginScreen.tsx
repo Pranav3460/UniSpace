@@ -44,8 +44,7 @@ export default function LoginScreen({ navigation }: any) {
           isDesktop && styles.cardDesktop,
           isDesktop && { backgroundColor: colors.card, borderColor: colors.border }
         ]}>
-          <Text style={[styles.header, { color: colors.text }]}>Login to CampusConnect</Text>
-          
+          <Text style={styles.header}>Login to CampusConnect</Text>
           <View style={styles.heroWrap}>
             <Image
               source={COLLEGE_IMG}
@@ -53,25 +52,16 @@ export default function LoginScreen({ navigation }: any) {
               resizeMode="cover"
             />
           </View>
-
-          <Text style={[styles.welcome, { color: colors.text }]}>Welcome Back 👋</Text>
-          <Text style={[styles.subtitle, { color: colors.subText }]}>Enter your credentials to access your account.</Text>
-
-          <View style={[styles.inputContainer, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-            <Ionicons name="mail-outline" size={20} color={colors.subText} style={styles.inputIcon} />
-            <TextInput
-              placeholder="Email or Student ID"
-              placeholderTextColor={colors.subText}
-              value={email}
-              onChangeText={setEmail}
-              style={[styles.input, { color: colors.text }]}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
-          </View>
-
-          <View style={[styles.passwordContainer, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-            <Ionicons name="lock-closed-outline" size={20} color={colors.subText} style={styles.inputIcon} />
+          <Text style={styles.welcome}>Welcome to CampusConnect</Text>
+          <TextInput
+            placeholder="Email or Student ID"
+            value={email}
+            onChangeText={setEmail}
+            style={styles.input}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+          <View style={styles.passwordContainer}>
             <TextInput
               placeholder="Password"
               placeholderTextColor={colors.subText}

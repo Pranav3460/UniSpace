@@ -14,7 +14,9 @@ import LostFoundScreen from './src/screens/LostFoundScreen';
 import StudyGroupsScreen from './src/screens/StudyGroupsScreen';
 import GroupChatScreen from './src/screens/GroupChatScreen';
 import ResourcesScreen from './src/screens/ResourcesScreen';
-import EventsScreen from './src/screens/EventsScreen';
+import EventHubScreen from './src/screens/EventHubScreen';
+import ApprovalDashboardScreen from './src/screens/ApprovalDashboardScreen';
+import NotificationBell from './src/components/NotificationBell';
 import SettingsScreen from './src/screens/SettingsScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import GetStartedScreen from './src/screens/GetStartedScreen';
@@ -32,12 +34,6 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { SocketProvider } from './src/context/SocketContext';
 
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
-import { ToastProvider } from './src/context/ToastContext';
-import LiveConnectionBadge from './src/components/LiveConnectionBadge';
-import RealtimeNotificationBell from './src/components/RealtimeNotificationBell';
-import OfflineBanner from './src/components/OfflineBanner';
-
-import { CustomDrawerContent } from './src/components/ui';
 
 const Drawer = createDrawerNavigator();
 const Stack = createNativeStackNavigator();
@@ -53,15 +49,7 @@ function MainDrawer() {
       screenOptions={({ navigation }) => ({
         headerStyle: { backgroundColor: isDark ? '#0f172a' : '#0b1220' },
         headerTintColor: '#fff',
-        headerRight: () => (
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, gap: 12 }}>
-            <TouchableOpacity onPress={() => navigation.navigate('Search')}>
-              <Ionicons name="search" size={22} color="#fff" />
-            </TouchableOpacity>
-            <LiveConnectionBadge />
-            <RealtimeNotificationBell />
-          </View>
-        ),
+        headerRight: () => <NotificationBell />,
         drawerActiveBackgroundColor: isDark ? '#1e293b' : '#16233a',
         drawerActiveTintColor: '#dbe5ff',
         drawerInactiveTintColor: isDark ? '#94a3b8' : '#c8d0e0',
@@ -85,13 +73,43 @@ function MainDrawer() {
       <Drawer.Screen name="Lost & Found" component={LostFoundScreen} options={{ drawerIcon: ({ color, size }) => (<Ionicons name="search-outline" color={color} size={size} />) }} />
       <Drawer.Screen name="Study Groups" component={StudyGroupsScreen} options={{ drawerIcon: ({ color, size }) => (<Ionicons name="people-outline" color={color} size={size} />) }} />
       <Drawer.Screen name="Resources" component={ResourcesScreen} options={{ drawerIcon: ({ color, size }) => (<Ionicons name="folder-outline" color={color} size={size} />) }} />
-      <Drawer.Screen name="Events" component={EventsScreen} options={{ drawerIcon: ({ color, size }) => (<Ionicons name="calendar-outline" color={color} size={size} />) }} />
+      <Drawer.Screen name="Event Hub" component={EventHubStack} options={{ drawerIcon: ({ color, size }) => (<Ionicons name="rocket-outline" color={color} size={size} />), headerShown: false }} />
       <Drawer.Screen name="Settings" component={SettingsScreen} options={{ drawerIcon: ({ color, size }) => (<Ionicons name="settings-outline" color={color} size={size} />) }} />
     </Drawer.Navigator>
   );
 }
 
-function AuthStack({ initialRoute }: { initialRoute: string }) {
+function EventHubStack() {
+  const { isDark } = useTheme();
+  return (
+    <Stack.Navigator screenOptions={{
+      headerShown: true,
+      headerStyle: { backgroundColor: isDark ? '#0f172a' : '#0b1220' },
+      headerTintColor: '#fff',
+      headerRight: () => <NotificationBell />,
+    }}>
+      <Stack.Screen
+        name="EventHubMain"
+        component={EventHubScreen}
+        options={({ navigation }) => ({
+          title: 'Event Hub',
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => navigation.dispatch(DrawerActions.toggleDrawer())} style={{ marginRight: 16 }}>
+              <Ionicons name="menu" size={24} color="#fff" />
+            </TouchableOpacity>
+          ),
+        })}
+      />
+      <Stack.Screen
+        name="ApprovalDashboard"
+        component={ApprovalDashboardScreen}
+        options={{ title: 'Approval Dashboard' }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+function AuthStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName={initialRoute as any}>
       <Stack.Screen name="Onboarding" component={OnboardingScreen} />
@@ -134,12 +152,6 @@ function AdminStack() {
             <TouchableOpacity onPress={() => navigation.dispatch(DrawerActions.toggleDrawer())} style={{ marginRight: 16 }}>
               <Ionicons name="menu" size={24} color="#fff" />
             </TouchableOpacity>
-          ),
-          headerRight: () => (
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, gap: 12 }}>
-              <LiveConnectionBadge />
-              <RealtimeNotificationBell />
-            </View>
           ),
         })}
       />
@@ -192,12 +204,9 @@ export default function App() {
     <SafeAreaProvider>
       <AuthProvider>
         <SocketProvider>
-          <ToastProvider>
-            <ThemeProvider>
-              <RootNavigator />
-              <OfflineBanner />
-            </ThemeProvider>
-          </ToastProvider>
+          <ThemeProvider>
+            <RootNavigator />
+          </ThemeProvider>
         </SocketProvider>
       </AuthProvider>
     </SafeAreaProvider>

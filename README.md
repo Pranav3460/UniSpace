@@ -1194,4 +1194,4 @@ test: add validation for approval flow
 
 ---
 
-*Built with ❤️ by the TeamRocket Team*
+*Built with ❤️ by the TeamRocket.*

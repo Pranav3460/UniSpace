@@ -1,24 +1,22 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ScrollView, ActivityIndicator, useWindowDimensions, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ScrollView, ActivityIndicator, useWindowDimensions, Platform, KeyboardAvoidingView } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-let COLLEGE_IMG: any;
-try { COLLEGE_IMG = require('../../assets/krmu pic.jpg'); } catch (e) { COLLEGE_IMG = undefined; }
 import { useAuth } from '../context/AuthContext';
 import { API_BASE_URL } from '../api/client';
+import { useTheme } from '../context/ThemeContext';
+
+let COLLEGE_IMG: any;
+try { COLLEGE_IMG = require('../../assets/krmu pic.jpg'); } catch (e) { COLLEGE_IMG = undefined; }
 
 const DESIGNATIONS = ['Student', 'Teacher'];
-const SCHOOLS = [
-  'SOET',
-  'SOMC',
-  'SMAS',
-  'SLAS',
-  'SOAD'
-];
+const SCHOOLS = ['SOET', 'SOMC', 'SMAS', 'SLAS', 'SOAD'];
 
 export default function SignupScreen({ navigation }: any) {
   const { signup } = useAuth() as any;
+  const { colors, isDark } = useTheme();
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -55,7 +53,6 @@ export default function SignupScreen({ navigation }: any) {
     try {
       const response = await fetch(uri);
       const blob = await response.blob();
-
       const formData = new FormData();
       formData.append('file', blob as any, 'profile.jpg');
 
@@ -76,42 +73,27 @@ export default function SignupScreen({ navigation }: any) {
   }
 
   async function doSignup() {
-    if (!email || !password) {
-      return Alert.alert('Missing Fields', 'Please provide email and password');
-    }
-    if (!name || !phone || !designation || !school) {
-      return Alert.alert('Missing Fields', 'Please fill in all required fields');
-    }
+    if (!email || !password) return Alert.alert('Missing Fields', 'Please provide email and password');
+    if (!name || !phone || !designation || !school) return Alert.alert('Missing Fields', 'Please fill in all required fields');
 
     setUploading(true);
     try {
       let photoUrl: string | undefined = undefined;
-
-      // Upload photo if selected
       if (photoUri) {
         photoUrl = await uploadPhoto(photoUri) || undefined;
       }
-      // Create account with all profile data
-      const role = designation.toLowerCase(); // 'student' or 'teacher'
+      const role = designation.toLowerCase();
       const ok = await signup(email, password, {
-        name,
-        phone,
-        designation,
-        school,
-        photoUrl,
-        role,
+        name, phone, designation, school, photoUrl, role,
       });
 
       setUploading(false);
 
-      if (!ok) {
-        return Alert.alert('Error', 'Account already exists or server error');
-      }
+      if (!ok) return Alert.alert('Error', 'Account already exists or server error');
 
       if (designation === 'Teacher') {
         Alert.alert('Signup successful!', 'Please wait for admin approval.');
       }
-      // If student, auto-login happens via Firebase auth state change
     } catch (error) {
       setUploading(false);
       Alert.alert('Error', 'Failed to create account');
@@ -119,243 +101,202 @@ export default function SignupScreen({ navigation }: any) {
   }
 
   return (
-    <View style={styles.mainContainer}>
+    <KeyboardAvoidingView style={[styles.mainContainer, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={[
         styles.scrollContainer,
         isDesktop && styles.scrollContainerDesktop
-      ]}>
+      ]} showsVerticalScrollIndicator={false}>
         <View style={[
           styles.contentContainer,
-          isDesktop && styles.cardDesktop
+          isDesktop && styles.cardDesktop,
+          isDesktop && { backgroundColor: colors.card, borderColor: colors.border }
         ]}>
           {COLLEGE_IMG && <Image source={COLLEGE_IMG} style={[styles.hero, isDesktop && styles.heroDesktop]} resizeMode="cover" />}
-          <Text style={styles.title}>Sign up</Text>
+          
+          <Text style={[styles.title, { color: colors.text }]}>Create an Account</Text>
+          <Text style={[styles.subtitle, { color: colors.subText }]}>Join the CampusConnect community today.</Text>
 
-          {/* Photo Upload */}
-          <TouchableOpacity style={styles.photoContainer} onPress={pickImage}>
+          <TouchableOpacity style={styles.photoContainer} onPress={pickImage} activeOpacity={0.8}>
             {photoUri ? (
               <Image source={{ uri: photoUri }} style={styles.photoPreview} />
             ) : (
-              <View style={styles.photoPlaceholder}>
-                <Text style={styles.photoText}>Tap to add photo</Text>
+              <View style={[styles.photoPlaceholder, { backgroundColor: isDark ? '#1f2937' : '#eaf0ff' }]}>
+                <Ionicons name="camera" size={32} color="#3b5bfd" />
+                <Text style={styles.photoText}>Add Photo</Text>
+              </View>
+            )}
+            {photoUri && (
+              <View style={styles.editBadge}>
+                <Ionicons name="pencil" size={14} color="#fff" />
               </View>
             )}
           </TouchableOpacity>
 
-          <TextInput
-            placeholder="Full Name *"
-            value={name}
-            onChangeText={setName}
-            style={styles.input}
-          />
-          <TextInput
-            placeholder="Email *"
-            value={email}
-            onChangeText={setEmail}
-            style={styles.input}
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
-          <TextInput
-            placeholder="Phone Number *"
-            value={phone}
-            onChangeText={setPhone}
-            style={styles.input}
-            keyboardType="phone-pad"
-          />
-
-          {/* Designation Dropdown */}
-          <View style={styles.pickerContainer}>
-            <Text style={styles.pickerLabel}>Designation *</Text>
-            <View style={styles.pickerWrapper}>
-              <Picker
-                selectedValue={designation}
-                onValueChange={(itemValue: string) => setDesignation(itemValue)}
-                style={styles.picker}
-              >
-                <Picker.Item label="Select Designation" value="" />
-                {DESIGNATIONS.map((des) => (
-                  <Picker.Item key={des} label={des} value={des} />
-                ))}
-              </Picker>
+          <View style={styles.formGrid}>
+            <View style={[styles.inputContainer, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+              <Ionicons name="person-outline" size={20} color={colors.subText} style={styles.inputIcon} />
+              <TextInput placeholder="Full Name *" placeholderTextColor={colors.subText} value={name} onChangeText={setName} style={[styles.input, { color: colors.text }]} />
             </View>
-          </View>
-
-          {/* School/Department Dropdown */}
-          <View style={styles.pickerContainer}>
-            <Text style={styles.pickerLabel}>School/Department *</Text>
-            <View style={styles.pickerWrapper}>
-              <Picker
-                selectedValue={school}
-                onValueChange={(itemValue: string) => setSchool(itemValue)}
-                style={styles.picker}
-              >
-                <Picker.Item label="Select School/Department" value="" />
-                {SCHOOLS.map((sch) => (
-                  <Picker.Item key={sch} label={sch} value={sch} />
-                ))}
-              </Picker>
+            
+            <View style={[styles.inputContainer, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+              <Ionicons name="mail-outline" size={20} color={colors.subText} style={styles.inputIcon} />
+              <TextInput placeholder="Email *" placeholderTextColor={colors.subText} value={email} onChangeText={setEmail} style={[styles.input, { color: colors.text }]} keyboardType="email-address" autoCapitalize="none" />
             </View>
-          </View>
 
-          {/* Password with Toggle */}
-          <View style={styles.passwordContainer}>
-            <TextInput
-              placeholder="Password *"
-              value={password}
-              secureTextEntry={!showPassword}
-              onChangeText={setPassword}
-              style={styles.passwordInput}
-              onSubmitEditing={doSignup}
-              returnKeyType="go"
-            />
-            <TouchableOpacity
-              style={styles.eyeButton}
-              onPress={() => setShowPassword(!showPassword)}
-            >
-              <Ionicons
-                name={showPassword ? 'eye-outline' : 'eye-off-outline'}
-                size={24}
-                color="#666"
+            <View style={[styles.inputContainer, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+              <Ionicons name="call-outline" size={20} color={colors.subText} style={styles.inputIcon} />
+              <TextInput placeholder="Phone Number *" placeholderTextColor={colors.subText} value={phone} onChangeText={setPhone} style={[styles.input, { color: colors.text }]} keyboardType="phone-pad" />
+            </View>
+
+            <View style={{ flexDirection: isDesktop ? 'row' : 'column', gap: isDesktop ? 16 : 0 }}>
+              <View style={[styles.pickerContainer, { flex: 1 }]}>
+                <Text style={[styles.pickerLabel, { color: colors.subText }]}>Designation *</Text>
+                <View style={[styles.pickerWrapper, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                  <Picker selectedValue={designation} onValueChange={setDesignation} style={[styles.picker, { color: colors.text }]} dropdownIconColor={colors.text}>
+                    <Picker.Item label="Select..." value="" color={isDark ? '#999' : '#000'} />
+                    {DESIGNATIONS.map((des) => <Picker.Item key={des} label={des} value={des} color={isDark ? '#eee' : '#000'} />)}
+                  </Picker>
+                </View>
+              </View>
+
+              <View style={[styles.pickerContainer, { flex: 1 }]}>
+                <Text style={[styles.pickerLabel, { color: colors.subText }]}>School/Dept *</Text>
+                <View style={[styles.pickerWrapper, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                  <Picker selectedValue={school} onValueChange={setSchool} style={[styles.picker, { color: colors.text }]} dropdownIconColor={colors.text}>
+                    <Picker.Item label="Select..." value="" color={isDark ? '#999' : '#000'} />
+                    {SCHOOLS.map((sch) => <Picker.Item key={sch} label={sch} value={sch} color={isDark ? '#eee' : '#000'} />)}
+                  </Picker>
+                </View>
+              </View>
+            </View>
+
+            <View style={[styles.inputContainer, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+              <Ionicons name="lock-closed-outline" size={20} color={colors.subText} style={styles.inputIcon} />
+              <TextInput
+                placeholder="Password *"
+                placeholderTextColor={colors.subText}
+                value={password}
+                secureTextEntry={!showPassword}
+                onChangeText={setPassword}
+                style={[styles.input, { color: colors.text }]}
+                onSubmitEditing={doSignup}
+                returnKeyType="go"
               />
-            </TouchableOpacity>
+              <TouchableOpacity style={styles.eyeButton} onPress={() => setShowPassword(!showPassword)}>
+                <Ionicons name={showPassword ? 'eye-outline' : 'eye-off-outline'} size={22} color={colors.subText} />
+              </TouchableOpacity>
+            </View>
           </View>
 
-          <TouchableOpacity
-            style={[styles.btn, uploading && styles.btnDisabled]}
-            onPress={doSignup}
-            disabled={uploading}
-          >
-            {uploading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={{ color: '#fff', fontWeight: '700' }}>Create account</Text>
-            )}
+          <TouchableOpacity style={[styles.btn, uploading && { opacity: 0.7 }]} onPress={doSignup} disabled={uploading} activeOpacity={0.8}>
+            {uploading ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>Create Account</Text>}
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => navigation.navigate('Login')} style={{ marginTop: 12 }}>
-            <Text style={styles.linkText}>Already have an account? Login</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Login')} style={{ marginTop: 24, paddingVertical: 8 }}>
+            <Text style={[styles.linkText, { color: colors.subText }]}>
+              Already have an account? <Text style={{ color: '#3b5bfd', fontWeight: '700' }}>Login</Text>
+            </Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  mainContainer: {
-    flex: 1,
-    backgroundColor: '#f5f8ff',
-  },
+  mainContainer: { flex: 1 },
   scrollContainer: {
     flexGrow: 1,
-    padding: 16,
+    paddingHorizontal: 24,
+    paddingTop: 40,
+    paddingBottom: 40,
   },
   scrollContainerDesktop: {
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 32,
-    paddingBottom: 32,
+    paddingTop: 40,
   },
   contentContainer: {
     width: '100%',
+    maxWidth: 500,
+    alignSelf: 'center',
   },
   cardDesktop: {
-    width: 500,
-    backgroundColor: '#fff',
-    borderRadius: 20,
+    borderRadius: 24,
     padding: 40,
+    borderWidth: 1,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 10,
-    ...Platform.select({
-      web: {
-        boxShadow: '0 20px 40px rgba(0,0,0,0.1)',
-      }
-    })
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 8,
   },
-  hero: { width: '100%', height: 140, borderRadius: 12, marginBottom: 12 },
-  heroDesktop: {
-    height: 180,
-    marginBottom: 24,
-  },
-  title: { fontSize: 24, fontWeight: '700', marginBottom: 12 },
-  photoContainer: { alignSelf: 'center', marginBottom: 16 },
-  photoPreview: { width: 120, height: 120, borderRadius: 60, borderWidth: 3, borderColor: '#3b5bfd' },
+  hero: { width: '100%', height: 140, borderRadius: 20, marginBottom: 20 },
+  heroDesktop: { height: 180 },
+  title: { fontSize: 26, fontWeight: '800', textAlign: 'center', marginBottom: 6 },
+  subtitle: { textAlign: 'center', fontSize: 15, marginBottom: 24 },
+  photoContainer: { alignSelf: 'center', marginBottom: 24, position: 'relative' },
+  photoPreview: { width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: '#3b5bfd' },
   photoPlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#e5e9f2',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
     borderColor: '#3b5bfd',
     borderStyle: 'dashed',
   },
-  photoText: { color: '#3b5bfd', fontWeight: '600', textAlign: 'center', paddingHorizontal: 10 },
-  input: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#e5e9f2'
+  photoText: { color: '#3b5bfd', fontWeight: '700', fontSize: 12, marginTop: 4 },
+  editBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#3b5bfd',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
   },
-  pickerContainer: {
-    marginBottom: 12,
-  },
-  pickerLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 4,
-    marginLeft: 4,
-    fontWeight: '600',
-  },
-  pickerWrapper: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e5e9f2',
-    overflow: 'hidden',
-  },
-  picker: {
-    height: 50,
-  },
-  passwordContainer: {
+  formGrid: { gap: 16, marginBottom: 24 },
+  inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#e5e9f2',
-    marginBottom: 12,
-    paddingRight: 8,
+    paddingHorizontal: 16,
+    height: 56,
   },
-  passwordInput: {
-    flex: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+  inputIcon: { marginRight: 12 },
+  input: { flex: 1, fontSize: 16 },
+  pickerContainer: { marginBottom: 16 },
+  pickerLabel: { fontSize: 13, fontWeight: '700', marginBottom: 6, marginLeft: 4, letterSpacing: 0.5, textTransform: 'uppercase' },
+  pickerWrapper: {
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+    height: 56,
+    justifyContent: 'center',
   },
-  eyeButton: {
-    padding: 8,
-  },
+  picker: { height: 56 },
+  eyeButton: { padding: 8, marginRight: -8 },
   btn: {
     backgroundColor: '#3b5bfd',
-    borderRadius: 12,
-    paddingVertical: 12,
+    borderRadius: 16,
+    paddingVertical: 16,
     alignItems: 'center',
-    marginTop: 8,
-  },
-  btnDisabled: {
-    opacity: 0.6,
+    justifyContent: 'center',
+    shadowColor: '#3b5bfd',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
   },
   linkText: {
-    color: '#3b5bfd',
     textAlign: 'center',
-    fontWeight: '600',
+    fontSize: 15,
   },
 });

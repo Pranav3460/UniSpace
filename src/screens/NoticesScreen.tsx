@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, FlatList, TextInput, StyleSheet, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, FlatList, TextInput, StyleSheet, TouchableOpacity, Modal, RefreshControl } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE_URL } from '../api/client';
 import { useSocket } from '../context/SocketContext';
 import { useTheme } from '../context/ThemeContext';
+import CalendarWidget from '../components/CalendarWidget';
+import { EmptyState } from '../components/ui';
 
 type Notice = {
   _id: string;
@@ -23,6 +25,7 @@ export default function NoticesScreen() {
   const [search, setSearch] = useState('');
   const [items, setItems] = useState<Notice[]>([]);
   const [modal, setModal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
 
@@ -67,6 +70,12 @@ export default function NoticesScreen() {
       console.error('Failed to fetch notices', e);
     }
   }
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchNotices();
+    setRefreshing(false);
+  };
 
   async function createNotice() {
     if (!newTitle) return;
@@ -184,8 +193,12 @@ export default function NoticesScreen() {
       />
       <FlatList
         data={filteredItems}
+        ListHeaderComponent={<CalendarWidget />}
         keyExtractor={(n) => n._id || n.id || Math.random().toString()}
         contentContainerStyle={{ paddingBottom: 32 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+        }
         renderItem={({ item }) => (
           <View style={[styles.card, dynamicStyles.card]}>
             <View style={[styles.iconContainer, dynamicStyles.iconContainer]}>
@@ -205,7 +218,7 @@ export default function NoticesScreen() {
             )}
           </View>
         )}
-        ListEmptyComponent={<Text style={[styles.empty, dynamicStyles.empty]}>No notices yet.</Text>}
+        ListEmptyComponent={<EmptyState title="No notices yet" /> }
       />
 
       {/* Only show Add button for Teachers */}
@@ -272,7 +285,7 @@ export default function NoticesScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
-  title: { fontSize: 28, fontWeight: '800', marginBottom: 16 },
+  title: { fontSize: 28, fontWeight: '800', marginBottom: 16, marginTop: 10 },
   input: {
     borderRadius: 20,
     paddingHorizontal: 16,
@@ -301,11 +314,11 @@ const styles = StyleSheet.create({
   cardContent: { flex: 1 },
   cardTitle: { fontSize: 18, fontWeight: '700', marginBottom: 8 },
   cardBody: { lineHeight: 22, fontSize: 15 },
-  cardMeta: { fontSize: 12, marginTop: 8, fontWeight: '600' },
+  cardMeta: { fontSize: 12, marginTop: 12, fontWeight: '600' },
   iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
@@ -316,7 +329,7 @@ const styles = StyleSheet.create({
     right: 24,
     bottom: 32,
     backgroundColor: '#3b5bfd',
-    paddingVertical: 14,
+    paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 30,
     elevation: 8,
@@ -324,14 +337,17 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center'
   },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24 },
-  modalCard: { borderRadius: 24, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.2, shadowRadius: 20, elevation: 10, maxHeight: '80%' },
-  label: { fontSize: 14, fontWeight: '600', marginBottom: 6 },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
+  modalCard: { borderRadius: 24, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.2, shadowRadius: 20, elevation: 10, maxHeight: '85%' },
+  label: { fontSize: 13, fontWeight: '700', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
   dropdownBtn: {
     borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: 16,
+    padding: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -339,7 +355,7 @@ const styles = StyleSheet.create({
   dropdownBtnText: { fontSize: 15 },
   dropdownList: {
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: 16,
     marginTop: 4,
     padding: 4,
     position: 'absolute',
@@ -353,6 +369,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
   },
-  dropdownItem: { padding: 12, borderBottomWidth: 1 },
-  dropdownItemText: { fontSize: 14 },
+  dropdownItem: { padding: 14, borderBottomWidth: 1 },
+  dropdownItemText: { fontSize: 15 },
 });

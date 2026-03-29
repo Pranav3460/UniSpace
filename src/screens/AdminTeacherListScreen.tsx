@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Image, Platform } from 'react-native';
 import { API_BASE_URL } from '../api/client';
 import { Ionicons } from '@expo/vector-icons';
+import { SkeletonLoader } from '../components/ui/SkeletonLoader';
+import { EmptyState } from '../components/ui';
 
 type Teacher = {
     _id: string; // or email as id
@@ -142,14 +144,18 @@ export default function AdminTeacherListScreen() {
     return (
         <View style={styles.container}>
             {loading ? (
-                <ActivityIndicator size="large" color="#3b5bfd" style={{ marginTop: 50 }} />
+                <View style={{ padding: 16, gap: 16 }}>
+                    <SkeletonLoader variant="card" height={120} />
+                    <SkeletonLoader variant="card" height={120} />
+                    <SkeletonLoader variant="card" height={120} />
+                </View>
             ) : (
                 <FlatList
                     data={teachers}
                     renderItem={renderItem}
                     keyExtractor={item => item.email}
                     contentContainerStyle={styles.list}
-                    ListEmptyComponent={<Text style={styles.empty}>No teachers found</Text>}
+                    ListEmptyComponent={<EmptyState title="No teachers found" />}
                 />
             )}
         </View>

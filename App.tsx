@@ -1,4 +1,5 @@
 import 'react-native-gesture-handler';
+import React from 'react';
 import { NavigationContainer, DefaultTheme, DarkTheme, DrawerActions } from '@react-navigation/native';
 import { createDrawerNavigator, DrawerContentScrollView, DrawerItemList } from '@react-navigation/drawer';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -11,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import NoticesScreen from './src/screens/NoticesScreen';
 import LostFoundScreen from './src/screens/LostFoundScreen';
 import StudyGroupsScreen from './src/screens/StudyGroupsScreen';
+import GroupChatScreen from './src/screens/GroupChatScreen';
 import ResourcesScreen from './src/screens/ResourcesScreen';
 import EventsScreen from './src/screens/EventsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
@@ -24,6 +26,8 @@ import AdminDashboardScreen from './src/screens/AdminDashboardScreen';
 import AdminTeacherListScreen from './src/screens/AdminTeacherListScreen';
 import PendingScreen from './src/screens/PendingScreen';
 import RejectedScreen from './src/screens/RejectedScreen';
+import SearchScreen from './src/screens/SearchScreen';
+import OnboardingScreen from './src/screens/OnboardingScreen';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { SocketProvider } from './src/context/SocketContext';
 
@@ -31,35 +35,29 @@ import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { ToastProvider } from './src/context/ToastContext';
 import LiveConnectionBadge from './src/components/LiveConnectionBadge';
 import RealtimeNotificationBell from './src/components/RealtimeNotificationBell';
+import OfflineBanner from './src/components/OfflineBanner';
+
+import { CustomDrawerContent } from './src/components/ui';
 
 const Drawer = createDrawerNavigator();
 const Stack = createNativeStackNavigator();
 
 function MainDrawer() {
-  const { signOut, userProfile } = useAuth(); // Get userProfile for role check
+  const { userProfile } = useAuth(); // Get userProfile for role check
   const { colors, isDark } = useTheme();
-
-  const CustomDrawerContent = (props: any) => (
-    <DrawerContentScrollView {...props} contentContainerStyle={{ flex: 1, paddingBottom: 12, backgroundColor: colors.background }}>
-      <DrawerItemList {...props} />
-      <View style={{ flex: 1 }} />
-      <View style={{ padding: 12 }}>
-        <TouchableOpacity style={[styles.drawerLogout, { backgroundColor: isDark ? '#7f1d1d' : '#ffeef0' }]} onPress={() => signOut()}>
-          <Text style={{ color: '#ef4444', fontWeight: '700' }}>Logout</Text>
-        </TouchableOpacity>
-      </View>
-    </DrawerContentScrollView>
-  );
 
   return (
     <Drawer.Navigator
       initialRouteName={userProfile?.role === 'admin' ? "AdminDashboardStack" : "Notices"}
       drawerContent={(props) => <CustomDrawerContent {...props} />}
-      screenOptions={{
+      screenOptions={({ navigation }) => ({
         headerStyle: { backgroundColor: isDark ? '#0f172a' : '#0b1220' },
         headerTintColor: '#fff',
         headerRight: () => (
           <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, gap: 12 }}>
+            <TouchableOpacity onPress={() => navigation.navigate('Search')}>
+              <Ionicons name="search" size={22} color="#fff" />
+            </TouchableOpacity>
             <LiveConnectionBadge />
             <RealtimeNotificationBell />
           </View>
@@ -68,7 +66,7 @@ function MainDrawer() {
         drawerActiveTintColor: '#dbe5ff',
         drawerInactiveTintColor: isDark ? '#94a3b8' : '#c8d0e0',
         drawerStyle: { backgroundColor: colors.background },
-      }}
+      })}
     >
       {/* Admin Dashboard - visible only to role 'admin' */}
       {userProfile?.role === 'admin' && (
@@ -93,12 +91,13 @@ function MainDrawer() {
   );
 }
 
-function AuthStack() {
+function AuthStack({ initialRoute }: { initialRoute: string }) {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName={initialRoute as any}>
+      <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+      <Stack.Screen name="GetStarted" component={GetStartedScreen} />
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Signup" component={SignupScreen} />
-      <Stack.Screen name="GetStarted" component={GetStartedScreen} />
     </Stack.Navigator>
   );
 }
@@ -108,9 +107,11 @@ function MainStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Main" component={MainDrawer} />
+      <Stack.Screen name="GroupChat" component={GroupChatScreen as any} options={{ headerShown: true, title: 'Chat', headerStyle: { backgroundColor: isDark ? '#0f172a' : '#0b1220' }, headerTintColor: '#fff' }} />
       <Stack.Screen name="ReportFound" component={ReportFoundScreen} options={{ headerShown: true, title: 'Report Lost/Found Item', headerStyle: { backgroundColor: isDark ? '#0f172a' : '#0b1220' }, headerTintColor: '#fff' }} />
       <Stack.Screen name="UploadResource" component={UploadResourceScreen} options={{ headerShown: true, title: 'Upload Resource', headerStyle: { backgroundColor: isDark ? '#0f172a' : '#0b1220' }, headerTintColor: '#fff' }} />
       <Stack.Screen name="ProfileEdit" component={ProfileEditScreen} options={{ headerShown: true, title: 'Edit Profile', headerStyle: { backgroundColor: isDark ? '#0f172a' : '#0b1220' }, headerTintColor: '#fff' }} />
+      <Stack.Screen name="Search" component={SearchScreen} options={{ headerShown: false, presentation: 'fullScreenModal' }} />
     </Stack.Navigator>
   );
 }
@@ -150,8 +151,17 @@ function AdminStack() {
 function RootNavigator() {
   const { email, isLoading, role, userProfile } = useAuth();
   const { isDark } = useTheme();
+  const [hasSeenOnboarding, setHasSeenOnboarding] = React.useState<boolean | null>(null);
 
-  if (isLoading) {
+  React.useEffect(() => {
+    import('@react-native-async-storage/async-storage').then(module => {
+      module.default.getItem('hasSeenOnboarding').then(value => {
+        setHasSeenOnboarding(value === 'true');
+      });
+    });
+  }, []);
+
+  if (isLoading || hasSeenOnboarding === null) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#3b5bfd" />
@@ -172,7 +182,7 @@ function RootNavigator() {
   return (
     <NavigationContainer theme={isDark ? DarkTheme : DefaultTheme}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
-      {email ? <MainStack /> : <AuthStack />}
+      {email ? <MainStack /> : <AuthStack initialRoute={hasSeenOnboarding ? 'GetStarted' : 'Onboarding'} />}
     </NavigationContainer>
   );
 }
@@ -185,6 +195,7 @@ export default function App() {
           <ToastProvider>
             <ThemeProvider>
               <RootNavigator />
+              <OfflineBanner />
             </ThemeProvider>
           </ToastProvider>
         </SocketProvider>

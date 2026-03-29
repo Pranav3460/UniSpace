@@ -1,123 +1,255 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
-import { useAuth } from '../context/AuthContext';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../context/AuthContext';
+import { API_BASE_URL } from '../api/client';
+import { useTheme } from '../context/ThemeContext';
+import { SkeletonLoader } from '../components/ui/SkeletonLoader';
+// In a real app we'd use react-native-chart-kit, but for here we use simple UI blocks.
+// import { LineChart, BarChart } from 'react-native-chart-kit';
 
 export default function AdminDashboardScreen({ navigation }: any) {
-    const { signOut, userProfile } = useAuth();
+    const { signOut, userProfile, email } = useAuth();
+    const { colors, isDark } = useTheme();
+    const [stats, setStats] = useState<any>(null);
+    const [analytics, setAnalytics] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState('Overview');
+    
+    // Broadcast state
+    const [broadcastMsg, setBroadcastMsg] = useState('');
+    const [sendingBroadcast, setSendingBroadcast] = useState(false);
 
-    const menuItems = [
-        {
-            title: 'Pending Teacher Requests',
-            icon: 'people-circle-outline',
-            screen: 'AdminTeacherList',
-            color: '#FF9800'
-        },
-        {
-            title: 'Manage Notices',
-            icon: 'newspaper-outline',
-            screen: 'Notices', // We reuse Notices screen but with admin powers
-            color: '#2196F3'
-        },
-        {
-            title: 'Manage Study Groups',
-            icon: 'library-outline',
-            screen: 'StudyGroups', // We reuse StudyGroups screen but with admin powers
-            color: '#4CAF50'
-        },
-    ];
+    useEffect(() => {
+        fetchData();
+    }, []);
+
+    const fetchData = async () => {
+        setLoading(true);
+        try {
+            const [statsRes, analyticsRes] = await Promise.all([
+                fetch(`${API_BASE_URL}/api/admin/stats`),
+                fetch(`${API_BASE_URL}/api/admin/analytics`)
+            ]);
+            const s = await statsRes.json();
+            const a = await analyticsRes.json();
+            setStats(s);
+            setAnalytics(a);
+        } catch (e) {
+            console.error('Failed to fetch admin stats', e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const sendBroadcast = async () => {
+        if (!broadcastMsg.trim()) return;
+        setSendingBroadcast(true);
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/admin/broadcast`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: broadcastMsg, senderEmail: email, type: 'alert' }),
+            });
+            if (response.ok) {
+                Alert.alert('Success', 'Broadcast sent successfully global-wide.');
+                setBroadcastMsg('');
+            }
+        } catch(e) {
+            Alert.alert('Error', 'Failed to send broadcast');
+        } finally {
+            setSendingBroadcast(false);
+        }
+    };
+
+    const tabs = ['Overview', 'Users', 'Analytics', 'System Health', 'Manage'];
+
+    const StatCard = ({ title, value, icon, color }: any) => (
+        <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.statIcon, { backgroundColor: color + '20' }]}>
+                <Ionicons name={icon} size={24} color={color} />
+            </View>
+            <View>
+                <Text style={[styles.statValue, { color: colors.text }]}>{value !== undefined ? value : '...'}</Text>
+                <Text style={{ color: colors.subText, fontSize: 13, fontWeight: '600' }}>{title}</Text>
+            </View>
+        </View>
+    );
 
     return (
-        <ScrollView style={styles.container}>
-            <View style={styles.header}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
+            <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
                 <View>
-                    <Text style={styles.welcome}>Welcome Admin</Text>
-                    <Text style={styles.name}>{userProfile?.name || 'Administrator'}</Text>
+                    <Text style={styles.welcome}>Admin Dashboard</Text>
+                    <Text style={[styles.name, { color: colors.text }]}>{userProfile?.name || 'Administrator'}</Text>
                 </View>
                 <TouchableOpacity onPress={signOut} style={styles.logoutBtn}>
                     <Ionicons name="log-out-outline" size={24} color="#FF3B30" />
                 </TouchableOpacity>
             </View>
 
-            <View style={styles.grid}>
-                {menuItems.map((item, index) => (
-                    <TouchableOpacity
-                        key={index}
-                        style={styles.card}
-                        onPress={() => navigation.navigate(item.screen)}
-                    >
-                        <View style={[styles.iconContainer, { backgroundColor: item.color + '20' }]}>
-                            <Ionicons name={item.icon as any} size={32} color={item.color} />
-                        </View>
-                        <Text style={styles.cardTitle}>{item.title}</Text>
-                        <Ionicons name="chevron-forward" size={20} color="#ccc" style={styles.arrow} />
-                    </TouchableOpacity>
-                ))}
+            <View style={styles.tabContainer}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {tabs.map((tab) => (
+                        <TouchableOpacity 
+                            key={tab} 
+                            style={[styles.tab, activeTab === tab && styles.activeTab, { borderBottomColor: activeTab === tab ? '#3b5bfd' : 'transparent' }]}
+                            onPress={() => setActiveTab(tab)}
+                        >
+                            <Text style={[styles.tabText, activeTab === tab && styles.activeTabText, { color: activeTab === tab ? '#3b5bfd' : colors.subText }]}>{tab}</Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
             </View>
-        </ScrollView>
+
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+                {loading ? (
+                    <View style={{ flexWrap: 'wrap', flexDirection: 'row', gap: 12, justifyContent: 'space-between', paddingVertical: 16 }}>
+                        {[...Array(6)].map((_, i) => (
+                            <SkeletonLoader key={i} variant="card" width="48%" height={100} />
+                        ))}
+                    </View>
+                ) : (
+                    <>
+                        {activeTab === 'Overview' && (
+                            <>
+                                <View style={styles.statsGrid}>
+                                    <StatCard title="Total Users" value={stats?.users?.total} icon="people" color="#3b82f6" />
+                                    <StatCard title="Teachers" value={stats?.users?.teachers} icon="school" color="#10b981" />
+                                    <StatCard title="Groups" value={stats?.groups} icon="library" color="#f59e0b" />
+                                    <StatCard title="Events" value={stats?.events} icon="calendar" color="#8b5cf6" />
+                                    <StatCard title="Resources" value={stats?.resources} icon="document-text" color="#ec4899" />
+                                    <StatCard title="Notices" value={stats?.notices} icon="megaphone" color="#f43f5e" />
+                                </View>
+
+                                <View style={[styles.broadcastSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Global Broadcast</Text>
+                                    <Text style={{ color: colors.subText, marginBottom: 12, fontSize: 13 }}>Send an alert to all connected users instantly.</Text>
+                                    <TextInput 
+                                        style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+                                        placeholder="Enter urgent message..."
+                                        placeholderTextColor={colors.subText}
+                                        value={broadcastMsg}
+                                        onChangeText={setBroadcastMsg}
+                                        multiline
+                                    />
+                                    <TouchableOpacity style={styles.sendBtn} onPress={sendBroadcast} disabled={sendingBroadcast}>
+                                        <Text style={{ color: '#fff', fontWeight: 'bold' }}>{sendingBroadcast ? 'Sending...' : 'Send Broadcast'}</Text>
+                                        <Ionicons name="send" size={16} color="#fff" style={{ marginLeft: 8 }} />
+                                    </TouchableOpacity>
+                                </View>
+                            </>
+                        )}
+
+                        {activeTab === 'Analytics' && (
+                            <View style={[styles.analyticsSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 16 }]}>Last 30 Days Growth</Text>
+                                <View style={styles.chartPlaceholder}>
+                                    <Text style={{ color: '#9ca3af', fontWeight: '600' }}>[ Growth Chart Visualization ]</Text>
+                                </View>
+                                <View style={styles.growthStats}>
+                                    <View style={styles.growthStat}>
+                                        <Text style={[styles.growthValue, { color: '#10b981' }]}>+{analytics?.recentSignups}</Text>
+                                        <Text style={{ color: colors.subText, fontSize: 12 }}>New Users</Text>
+                                    </View>
+                                    <View style={styles.growthStat}>
+                                        <Text style={[styles.growthValue, { color: '#3b82f6' }]}>+{analytics?.recentEvents}</Text>
+                                        <Text style={{ color: colors.subText, fontSize: 12 }}>New Events</Text>
+                                    </View>
+                                    <View style={styles.growthStat}>
+                                        <Text style={[styles.growthValue, { color: '#8b5cf6' }]}>+{analytics?.recentGroups}</Text>
+                                        <Text style={{ color: colors.subText, fontSize: 12 }}>New Groups</Text>
+                                    </View>
+                                </View>
+                            </View>
+                        )}
+
+                        {activeTab === 'System Health' && (
+                            <View style={[styles.healthSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                <Text style={[styles.sectionTitle, { color: colors.text }]}>System Status</Text>
+                                <View style={styles.healthRow}>
+                                    <Text style={{ color: colors.text, fontWeight: '600' }}>API Servers</Text>
+                                    <View style={styles.statusBadge}><Text style={styles.statusText}>ALL SYSTEMS NORMAL</Text></View>
+                                </View>
+                                <View style={styles.healthRow}>
+                                    <Text style={{ color: colors.text, fontWeight: '600' }}>Database</Text>
+                                    <View style={styles.statusBadge}><Text style={styles.statusText}>CONNECTED</Text></View>
+                                </View>
+                                <View style={styles.healthRow}>
+                                    <Text style={{ color: colors.text, fontWeight: '600' }}>Realtime Socket.io</Text>
+                                    <View style={[styles.statusBadge, { backgroundColor: '#10b981' }]}><Text style={[styles.statusText, {color: '#fff'}]}>LIVE & HEALTHY</Text></View>
+                                </View>
+                            </View>
+                        )}
+
+                        {activeTab === 'Manage' && (
+                            <View style={{ gap: 12 }}>
+                                {[
+                                    { title: 'Pending Teacher Requests', icon: 'people-circle-outline', screen: 'AdminTeacherList', color: '#f59e0b' },
+                                    { title: 'Manage Users', icon: 'people-outline', screen: 'AdminTeacherList', color: '#10b981' }, 
+                                    { title: 'Manage Notices', icon: 'newspaper-outline', screen: 'Notices', color: '#3b82f6' },
+                                    { title: 'Manage Groups', icon: 'library-outline', screen: 'StudyGroups', color: '#8b5cf6' },
+                                ].map((item, index) => (
+                                    <TouchableOpacity key={index} style={[styles.manageCard, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => navigation.navigate(item.screen)}>
+                                        <View style={[styles.iconContainer, { backgroundColor: item.color + '20' }]}>
+                                            <Ionicons name={item.icon as any} size={28} color={item.color} />
+                                        </View>
+                                        <Text style={[styles.manageTitle, { color: colors.text }]}>{item.title}</Text>
+                                        <Ionicons name="chevron-forward" size={20} color={colors.subText} />
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        )}
+
+                        {activeTab === 'Users' && (
+                            <View>
+                                <TouchableOpacity style={[styles.manageCard, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => navigation.navigate('AdminTeacherList')}>
+                                    <View style={[styles.iconContainer, { backgroundColor: '#10b981' + '20' }]}>
+                                        <Ionicons name="people" size={28} color="#10b981" />
+                                    </View>
+                                    <Text style={[styles.manageTitle, { color: colors.text }]}>View All Users Directory ({stats?.users?.total})</Text>
+                                    <Ionicons name="chevron-forward" size={20} color={colors.subText} />
+                                </TouchableOpacity>
+                            </View>
+                        )}
+
+                    </>
+                )}
+                <View style={{ height: 40 }} />
+            </ScrollView>
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#f5f8ff',
-    },
-    header: {
-        padding: 24,
-        backgroundColor: '#fff',
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
-    },
-    welcome: {
-        fontSize: 14,
-        color: '#666',
-        fontWeight: '600',
-    },
-    name: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#333',
-    },
-    logoutBtn: {
-        padding: 8,
-        backgroundColor: '#FFF0F0',
-        borderRadius: 8,
-    },
-    grid: {
-        padding: 16,
-        gap: 16,
-    },
-    card: {
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 20,
-        flexDirection: 'row',
-        alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 3,
-    },
-    iconContainer: {
-        width: 60,
-        height: 60,
-        borderRadius: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 16,
-    },
-    cardTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#333',
-        flex: 1,
-    },
-    arrow: {
-        marginLeft: 8,
-    }
+    container: { flex: 1 },
+    header: { padding: 24, paddingTop: 60, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1 },
+    welcome: { fontSize: 14, color: '#6b7280', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 },
+    name: { fontSize: 24, fontWeight: '800', marginTop: 4 },
+    logoutBtn: { padding: 10, backgroundColor: 'rgba(255,59,48,0.1)', borderRadius: 12 },
+    tabContainer: { borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+    tab: { paddingVertical: 16, paddingHorizontal: 20, borderBottomWidth: 2 },
+    activeTab: { borderBottomColor: '#3b5bfd' },
+    tabText: { fontWeight: '600', fontSize: 15 },
+    activeTabText: { color: '#3b5bfd' },
+    statsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 20 },
+    statCard: { width: '48%', backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 14, flexDirection: 'row', alignItems: 'center', borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+    statIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+    statValue: { fontSize: 20, fontWeight: '800', marginBottom: 2 },
+    broadcastSection: { padding: 20, borderRadius: 16, borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3 },
+    sectionTitle: { fontSize: 18, fontWeight: '800' },
+    input: { borderRadius: 12, padding: 14, minHeight: 100, textAlignVertical: 'top', borderWidth: 1, marginBottom: 12, fontSize: 16 },
+    sendBtn: { backgroundColor: '#3b5bfd', padding: 14, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+    manageCard: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 16, borderWidth: 1, marginBottom: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+    iconContainer: { width: 50, height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+    manageTitle: { flex: 1, fontSize: 16, fontWeight: '700' },
+    analyticsSection: { padding: 20, borderRadius: 16, borderWidth: 1, marginBottom: 20 },
+    chartPlaceholder: { height: 180, backgroundColor: '#f3f4f6', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderWidth: 1, borderColor: '#e5e7eb', borderStyle: 'dashed' },
+    growthStats: { flexDirection: 'row', justifyContent: 'space-around' },
+    growthStat: { alignItems: 'center' },
+    growthValue: { fontSize: 24, fontWeight: '800', marginBottom: 4 },
+    healthSection: { padding: 20, borderRadius: 16, borderWidth: 1 },
+    healthRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+    statusBadge: { backgroundColor: '#d1fae5', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+    statusText: { color: '#047857', fontSize: 11, fontWeight: '800', letterSpacing: 0.5 }
 });

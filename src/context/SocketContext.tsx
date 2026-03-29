@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { Alert } from 'react-native';
 import { API_BASE_URL } from '../api/client';
 import { useAuth } from './AuthContext';
 
@@ -38,6 +39,14 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         socketInstance.on('disconnect', () => {
             console.log('Socket disconnected');
             setIsConnected(false);
+        });
+
+        socketInstance.on('ADMIN_BROADCAST', (data: any) => {
+            Alert.alert(`🚨 Admin Broadcast`, data.message);
+        });
+
+        socketInstance.on('NEWS_BREAKING', (data: any) => {
+            Alert.alert(`📰 Breaking Tech News`, data.article.title);
         });
 
         setSocket(socketInstance);

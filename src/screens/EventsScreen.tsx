@@ -8,6 +8,8 @@ import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '../context/ThemeContext';
 import TechNewsTab from '../components/TechNewsTab';
+import { SkeletonLoader } from '../components/ui/SkeletonLoader';
+import { EmptyState } from '../components/ui';
 
 type Event = {
   _id: string;
@@ -34,6 +36,7 @@ type Event = {
   newDate?: string;
   newTime?: string;
   postponeReason?: string;
+  reactions?: { emoji: string; user: string }[];
 };
 
 export default function EventsScreen() {
@@ -317,6 +320,18 @@ export default function EventsScreen() {
     }
   };
 
+  async function toggleReaction(eventId: string, emoji: string) {
+    if (!email) return;
+    try {
+      // Optimistic upate (optional, skip for simplicity)
+      const res = await fetch(`${API_BASE_URL}/api/events/${eventId}/reactions`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: email, emoji })
+      });
+      if (res.ok) fetchEvents(); // re-fetch or rely on socket
+    } catch(e) {}
+  }
+
   const dynamicStyles = {
     container: { backgroundColor: colors.background },
     title: { color: colors.text },
@@ -387,36 +402,50 @@ export default function EventsScreen() {
         ) : null}
 
         {item.status === 'postponed' && item.postponeReason && (
-          <View style={styles.alertBox}>
-            <Text style={styles.alertBoxesText}><Text style={{fontWeight: 'bold'}}>Postponed:</Text> {item.postponeReason}</Text>
+          <View style={[styles.alertBox, { backgroundColor: isDark ? '#451a03' : '#fef3c7' }]}>
+            <Text style={[styles.alertBoxesText, { color: isDark ? '#fcd34d' : '#b45309' }]}><Text style={{fontWeight: 'bold'}}>Postponed:</Text> {item.postponeReason}</Text>
           </View>
         )}
         
         {item.status === 'rejected' && item.rejectionReason && (
-          <View style={[styles.alertBox, {backgroundColor: '#fee2e2'}]}>
-            <Text style={[styles.alertBoxesText, {color: '#991b1b'}]}><Text style={{fontWeight: 'bold'}}>Reason:</Text> {item.rejectionReason}</Text>
+          <View style={[styles.alertBox, {backgroundColor: isDark ? '#450a0a' : '#fee2e2'}]}>
+            <Text style={[styles.alertBoxesText, {color: isDark ? '#fca5a5' : '#991b1b'}]}><Text style={{fontWeight: 'bold'}}>Reason:</Text> {item.rejectionReason}</Text>
           </View>
         )}
 
-        <View style={styles.cardFooter}>
-           <Text style={styles.organizerText}>By {item.organizer}</Text>
+        <View style={[styles.cardFooter, { borderTopColor: colors.border }]}>
+           <Text style={[styles.organizerText, { color: colors.subText }]}>By {item.organizer}</Text>
            
-           <View style={{flexDirection: 'row', gap: 8}}>
+           {item.status === 'approved' && (
+             <View style={{flexDirection: 'row', gap: 6, alignItems: 'center', marginHorizontal: 12}}>
+               {['👍', '🔥'].map(emoji => {
+                 const count = item.reactions?.filter(r => r.emoji === emoji).length || 0;
+                 const hasReacted = item.reactions?.some(r => r.emoji === emoji && r.user === email);
+                 return (
+                   <TouchableOpacity key={emoji} onPress={() => toggleReaction(item._id, emoji)} style={[styles.actionBtnOutline, { borderColor: colors.border, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: hasReacted ? colors.primary + '20' : 'transparent' }]}>
+                     <Text style={{fontSize: 12}}>{emoji} {count > 0 ? count : ''}</Text>
+                   </TouchableOpacity>
+                 )
+               })}
+             </View>
+           )}
+
+           <View style={{flexDirection: 'row', gap: 8, marginLeft: 'auto'}}>
              {(isTeacher || isAdmin) && !isOwner && (
-                <TouchableOpacity style={styles.actionBtnOutline} onPress={() => Linking.openURL(`mailto:${item.contact_email}`)}>
+                <TouchableOpacity style={[styles.actionBtnOutline, { borderColor: colors.border }]} onPress={() => Linking.openURL(`mailto:${item.contact_email}`)}>
                    <Ionicons name="mail" size={16} color="#3b5bfd" />
                    <Text style={[styles.actionBtnText, {color: '#3b5bfd'}]}>Contact</Text>
                 </TouchableOpacity>
              )}
              
              {isAdmin && item.status !== 'postponed' && item.status === 'approved' && (
-                <TouchableOpacity style={styles.actionBtnOutline} onPress={() => { setPostponeEventId(item._id); setPostponeModalVisible(true); }}>
+                <TouchableOpacity style={[styles.actionBtnOutline, { borderColor: colors.border }]} onPress={() => { setPostponeEventId(item._id); setPostponeModalVisible(true); }}>
                    <Text style={[styles.actionBtnText, {color: '#f59e0b'}]}>Postpone</Text>
                 </TouchableOpacity>
              )}
              
              {isAdmin && (
-                <TouchableOpacity style={styles.actionBtnOutline} onPress={() => deleteEvent(item._id)}>
+                <TouchableOpacity style={[styles.actionBtnOutline, { borderColor: colors.border }]} onPress={() => deleteEvent(item._id)}>
                    <Ionicons name="trash" size={16} color="#ef4444" />
                 </TouchableOpacity>
              )}
@@ -471,17 +500,32 @@ export default function EventsScreen() {
       {activeTab === 'events' && (
         <>
           <View style={styles.filterBar}>
-            {['All', 'Hackathon', 'Workshop', 'Seminar', 'Competition'].map(f => (
-              <TouchableOpacity key={f} style={[styles.filterChip, filterType === f && { backgroundColor: '#3b5bfd' }]} onPress={() => setFilterType(f)}>
-                 <Text style={[styles.filterText, filterType === f && {color: '#fff'}]}>{f}</Text>
-              </TouchableOpacity>
-            ))}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {['All', 'Hackathon', 'Workshop', 'Seminar', 'Competition'].map(f => (
+                <TouchableOpacity 
+                   key={f} 
+                   style={[
+                     styles.filterChip, 
+                     { backgroundColor: isDark ? colors.card : '#f3f4f6', borderColor: colors.border },
+                     filterType === f && { backgroundColor: '#3b5bfd', borderColor: '#3b5bfd' }
+                   ]} 
+                   onPress={() => setFilterType(f)}>
+                   <Text style={[styles.filterText, { color: isDark ? colors.text : '#4b5563' }, filterType === f && {color: '#fff'}]}>{f}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
-          {loading ? <ActivityIndicator size="large" color="#3b5bfd" style={{ marginTop: 20 }} /> : 
+          {loading ? (
+             <View style={{ padding: 16, gap: 16 }}>
+               <SkeletonLoader variant="card" height={260} />
+               <SkeletonLoader variant="card" height={260} />
+               <SkeletonLoader variant="card" height={260} />
+             </View>
+          ) : (
              <FlatList data={filteredEvents} keyExtractor={item => item._id} renderItem={renderEventCard} 
              contentContainerStyle={{ paddingBottom: 80, paddingHorizontal: 16 }}
-             ListEmptyComponent={<Text style={[styles.empty, dynamicStyles.empty, {textAlign:'center', marginTop: 40}]}>No events found.</Text>} />
-          }
+             ListEmptyComponent={<EmptyState title="No events found" subtitle="Check back later or adjust your filters." />} />
+          )}
         </>
       )}
 
@@ -492,7 +536,7 @@ export default function EventsScreen() {
       {activeTab === 'approvals' && (
         <FlatList data={pendingEvents} keyExtractor={item => item._id} renderItem={renderApprovalCard} 
          contentContainerStyle={{ paddingBottom: 80, paddingHorizontal: 16 }}
-         ListEmptyComponent={<Text style={[styles.empty, dynamicStyles.empty, {textAlign:'center', marginTop: 40}]}>No pending approval requests.</Text>} />
+         ListEmptyComponent={<EmptyState title="No pending approvals" subtitle="You're all caught up!" />} />
       )}
 
       {/* CREATE MAIN MODAL */}
@@ -617,16 +661,16 @@ const styles = StyleSheet.create({
   btnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   btn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   
-  tabContainer: { flexDirection: 'row', paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  tabContainer: { flexDirection: 'row', paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)' },
   tabItem: { marginRight: 24, paddingVertical: 12, position: 'relative' },
   tabText: { fontSize: 15, fontWeight: '600' },
   tabLine: { position: 'absolute', bottom: -1, left: 0, right: 0, height: 3, borderTopLeftRadius: 3, borderTopRightRadius: 3 },
   
   filterBar: { flexDirection: 'row', padding: 16, gap: 8 },
-  filterChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
-  filterText: { fontSize: 13, fontWeight: '600', color: '#4b5563' },
+  filterChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
+  filterText: { fontSize: 13, fontWeight: '600' },
   
-  card: { borderRadius: 16, marginBottom: 16, overflow: 'hidden', borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
+  card: { borderRadius: 20, marginBottom: 16, overflow: 'hidden', borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
   cardImage: { width: '100%', height: 160 },
   cardContent: { padding: 16 },
   cardTitle: { fontSize: 18, fontWeight: '700', marginBottom: 8 },
@@ -635,26 +679,26 @@ const styles = StyleSheet.create({
   detailRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 6 },
   cardMeta: { fontSize: 13, fontWeight: '500' },
   cardDesc: { marginTop: 8, fontSize: 14, lineHeight: 20 },
-  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
-  organizerText: { fontSize: 12, fontWeight: '600', color: '#6b7280' },
+  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, paddingTop: 16, borderTopWidth: 1 },
+  organizerText: { fontSize: 12, fontWeight: '600' },
   
-  actionBtnOutline: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: '#e5e7eb' },
+  actionBtnOutline: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1 },
   actionBtnText: { fontSize: 12, fontWeight: '600' },
   
-  watermarkContainer: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: 'rgba(245, 158, 11, 0.8)', paddingVertical: 6, alignItems: 'center', zIndex: 10 },
+  watermarkContainer: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: 'rgba(245, 158, 11, 0.9)', paddingVertical: 6, alignItems: 'center', zIndex: 10 },
   watermarkText: { color: '#fff', fontSize: 11, fontWeight: 'bold', letterSpacing: 2 },
   
-  alertBox: { padding: 10, backgroundColor: '#fef3c7', borderRadius: 8, marginTop: 10 },
-  alertBoxesText: { color: '#b45309', fontSize: 13 },
+  alertBox: { padding: 12, borderRadius: 12, marginTop: 12 },
+  alertBoxesText: { fontSize: 13 },
   
   modalContainer: { flex: 1 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1 },
   modalTitle: { fontSize: 20, fontWeight: '700' },
   input: { borderWidth: 1, borderRadius: 12, padding: 14, fontSize: 15, marginTop: 4 },
   imageBtn: { borderWidth: 1, borderRadius: 12, padding: 24, alignItems: 'center', borderStyle: 'dashed', marginTop: 4 },
-  submitBtn: { backgroundColor: '#3b5bfd', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 32 },
+  submitBtn: { backgroundColor: '#3b5bfd', borderRadius: 16, paddingVertical: 16, alignItems: 'center', marginTop: 32 },
   
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  popupCard: { width: '100%', borderRadius: 16, padding: 20, elevation: 10 },
-  empty: { textAlign: 'center', color: '#6b7280', marginTop: 40, fontSize: 16 }
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  popupCard: { width: '100%', borderRadius: 24, padding: 24, elevation: 10 },
+  empty: { textAlign: 'center', marginTop: 40, fontSize: 16 }
 });

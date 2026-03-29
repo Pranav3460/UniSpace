@@ -10,7 +10,7 @@ export default function RejectedScreen() {
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
-            <View style={styles.card}>
+            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <Ionicons name="close-circle-outline" size={80} color="#ef4444" style={{ marginBottom: 20 }} />
                 <Text style={[styles.title, { color: colors.text }]}>Account Rejected</Text>
                 <Text style={[styles.message, { color: colors.subText }]}>
@@ -34,26 +34,27 @@ const styles = StyleSheet.create({
         padding: 20,
     },
     card: {
-        backgroundColor: '#fff',
-        borderRadius: 20,
-        padding: 30,
+        borderRadius: 24,
+        padding: 32,
         width: '100%',
         maxWidth: 400,
         alignItems: 'center',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 10,
-        elevation: 5,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 16,
+        elevation: 10,
+        borderWidth: 1,
     },
     title: {
-        fontSize: 24,
-        fontWeight: '700',
-        marginBottom: 10,
+        fontSize: 26,
+        fontWeight: '800',
+        marginBottom: 12,
+        textAlign: 'center'
     },
     message: {
         textAlign: 'center',
-        marginBottom: 24,
+        marginBottom: 32,
         fontSize: 16,
         lineHeight: 24,
     },

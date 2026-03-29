@@ -10,7 +10,7 @@ export default function PendingScreen() {
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
-            <View style={styles.card}>
+            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <Ionicons name="time-outline" size={80} color="#f59e0b" style={{ marginBottom: 20 }} />
                 <Text style={[styles.title, { color: colors.text }]}>Approval Pending</Text>
                 <Text style={[styles.message, { color: colors.subText }]}>
@@ -18,10 +18,10 @@ export default function PendingScreen() {
                     Please wait for approval before accessing the platform.
                 </Text>
 
-                <View style={styles.infoBox}>
-                    <Text style={styles.infoText}>Name: <Text style={styles.bold}>{userProfile?.name}</Text></Text>
-                    <Text style={styles.infoText}>Email: <Text style={styles.bold}>{userProfile?.email}</Text></Text>
-                    <Text style={styles.infoText}>Role: <Text style={styles.bold}>{userProfile?.role}</Text></Text>
+                <View style={[styles.infoBox, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                    <Text style={[styles.infoText, { color: colors.subText }]}>Name: <Text style={[styles.bold, { color: colors.text }]}>{userProfile?.name}</Text></Text>
+                    <Text style={[styles.infoText, { color: colors.subText }]}>Email: <Text style={[styles.bold, { color: colors.text }]}>{userProfile?.email}</Text></Text>
+                    <Text style={[styles.infoText, { color: colors.subText }]}>Role: <Text style={[styles.bold, { color: colors.text }]}>{userProfile?.role}</Text></Text>
                 </View>
 
                 <TouchableOpacity style={styles.checkBtn} onPress={refreshProfile}>
@@ -44,22 +44,23 @@ const styles = StyleSheet.create({
         padding: 20,
     },
     card: {
-        backgroundColor: '#fff',
-        borderRadius: 20,
-        padding: 30,
+        borderRadius: 24,
+        padding: 32,
         width: '100%',
         maxWidth: 400,
         alignItems: 'center',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 10,
-        elevation: 5,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 16,
+        elevation: 10,
+        borderWidth: 1,
     },
     title: {
-        fontSize: 24,
-        fontWeight: '700',
-        marginBottom: 10,
+        fontSize: 26,
+        fontWeight: '800',
+        marginBottom: 12,
+        textAlign: 'center'
     },
     message: {
         textAlign: 'center',
@@ -69,25 +70,24 @@ const styles = StyleSheet.create({
     },
     infoBox: {
         width: '100%',
-        backgroundColor: '#f3f4f6',
         padding: 16,
-        borderRadius: 12,
+        borderRadius: 16,
         marginBottom: 24,
+        borderWidth: 1,
     },
     infoText: {
-        color: '#4b5563',
-        marginBottom: 4,
+        marginBottom: 6,
+        fontSize: 15,
     },
     bold: {
         fontWeight: '700',
-        color: '#1f2937',
     },
     checkBtn: {
         backgroundColor: '#f59e0b',
-        paddingVertical: 12,
+        paddingVertical: 14,
         paddingHorizontal: 24,
-        borderRadius: 12,
-        marginBottom: 12,
+        borderRadius: 16,
+        marginBottom: 16,
         width: '100%',
         alignItems: 'center',
     },
@@ -103,6 +103,7 @@ const styles = StyleSheet.create({
     },
     logoutBtnText: {
         color: '#ef4444',
-        fontWeight: '600',
+        fontWeight: '700',
+        fontSize: 16
     },
 });

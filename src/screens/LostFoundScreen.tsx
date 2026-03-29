@@ -6,6 +6,7 @@ import { realtimeDb, auth } from '../lib/firebase';
 import { useSocket } from '../context/SocketContext';
 import { InlineVideo } from '../components/InlineVideo';
 import { useTheme } from '../context/ThemeContext';
+import { EmptyState } from '../components/ui';
 
 type Item = {
   id: string;
@@ -167,7 +168,7 @@ export default function LostFoundScreen({ navigation }: any) {
             </View>
           </View>
         )}
-        ListEmptyComponent={<Text style={[styles.empty, dynamicStyles.empty]}>No items yet.</Text>}
+        ListEmptyComponent={<EmptyState title="No items yet" />}
       />
       <View style={[styles.reportCard, dynamicStyles.reportCard]}>
         <Text style={[{ fontWeight: '700', marginBottom: 6 }, dynamicStyles.reportText]}>Post a found object</Text>

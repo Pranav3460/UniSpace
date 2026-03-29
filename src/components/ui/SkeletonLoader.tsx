@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, StyleSheet, ViewStyle } from 'react-native';
+import { View, StyleSheet, ViewStyle, DimensionValue } from 'react-native';
 import Animated, { 
     useSharedValue, 
     useAnimatedStyle, 
@@ -14,8 +14,8 @@ export type SkeletonVariant = 'text' | 'card' | 'avatar' | 'list-item';
 
 interface SkeletonLoaderProps {
     variant?: SkeletonVariant;
-    width?: number | string;
-    height?: number | string;
+    width?: DimensionValue;
+    height?: DimensionValue;
     style?: ViewStyle;
 }
 

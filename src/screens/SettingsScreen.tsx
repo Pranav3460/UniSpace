@@ -63,8 +63,8 @@ export default function SettingsScreen() {
       
       if (!res.ok) throw new Error(data.error);
       
-      const fileUri = `${FileSystem.documentDirectory || ''}export_${email}.json`;
-      await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(data, null, 2));
+      const fileUri = `${(FileSystem as any).documentDirectory || ''}export_${email}.json`;
+      await (FileSystem as any).writeAsStringAsync(fileUri, JSON.stringify(data, null, 2));
       
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(fileUri);

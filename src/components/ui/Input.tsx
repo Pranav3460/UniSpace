@@ -19,8 +19,8 @@ interface InputProps {
     leftIcon?: React.ReactNode;
     rightIcon?: React.ReactNode;
     onRightIconPress?: () => void;
-    onFocus?: (e: NativeSyntheticEvent<TextInputFocusEventData>) => void;
-    onBlur?: (e: NativeSyntheticEvent<TextInputFocusEventData>) => void;
+    onFocus?: (e: any) => void;
+    onBlur?: (e: any) => void;
 }
 
 export const Input: React.FC<InputProps> = ({
@@ -44,12 +44,12 @@ export const Input: React.FC<InputProps> = ({
         });
     }, [isActived, focusAnim]);
 
-    const handleFocus = (e: NativeSyntheticEvent<TextInputFocusEventData>) => {
+    const handleFocus = (e: any) => {
         setIsFocused(true);
         if (onFocus) onFocus(e);
     };
 
-    const handleBlur = (e: NativeSyntheticEvent<TextInputFocusEventData>) => {
+    const handleBlur = (e: any) => {
         setIsFocused(false);
         if (onBlur) onBlur(e);
     };

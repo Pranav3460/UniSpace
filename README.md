@@ -1,4 +1,4 @@
-# 🎓 CampusConnectCur
+# 🎓 UniSpace
 
 > **A real-time, full-stack campus super-app for students, teachers, and administrators.**  
 > Built with React Native · Expo · TypeScript · Node.js · Express · Socket.io · MongoDB
@@ -257,7 +257,7 @@ APPROVAL_APPROVED → creator's private room
 ## 4. Project Structure
 
 ```
-CampusConnectCur/
+UniSpace/
 ├── App.tsx                         # Root navigation: AuthStack + MainDrawer
 ├── index.ts                        # Expo entry point
 ├── app.json                        # Expo config (name, icons, android package)
@@ -1194,4 +1194,4 @@ test: add validation for approval flow
 
 ---
 
-*Built with ❤️ by the TeamRocket Team*
+*Built with ❤️ by the TeamRocket.*

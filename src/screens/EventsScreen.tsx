@@ -109,6 +109,16 @@ export default function EventsScreen() {
     socket.on('event:update', () => safeFetch());
     socket.on('event:delete', () => safeFetch());
 
+    // Real-time state updates for delete and postpone
+    socket.on('EVENT_DELETED', ({ eventId }: { eventId: string }) => {
+      if (mounted) setEvents(prev => (prev ?? []).filter(e => e._id !== eventId));
+    });
+    socket.on('EVENT_POSTPONED', (updatedEvent: Event) => {
+      if (mounted && updatedEvent?._id) {
+        setEvents(prev => (prev ?? []).map(e => e._id === updatedEvent._id ? updatedEvent : e));
+      }
+    });
+
     return () => {
       mounted = false;
       if (socket) {
@@ -116,6 +126,8 @@ export default function EventsScreen() {
         socket.off('event:request');
         socket.off('event:update');
         socket.off('event:delete');
+        socket.off('EVENT_DELETED');
+        socket.off('EVENT_POSTPONED');
       }
     };
   }, [socket, userProfile, isTeacher, isAdmin]);
@@ -291,11 +303,21 @@ export default function EventsScreen() {
   }
 
   async function deleteEvent(id: string) {
-    Alert.alert('Delete Event', 'Are you sure you want to delete this event?', [
+    Alert.alert('Delete Event', 'This event will be permanently deleted.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
-          await fetch(`${API_BASE_URL}/api/events/${id}`, { method: 'DELETE' });
-          fetchEvents();
+          try {
+            const response = await fetch(`${API_BASE_URL}/api/events/${id}`, { method: 'DELETE' });
+            if (!response.ok) {
+              const err = await response.json();
+              Alert.alert('Error', err?.error || 'Failed to delete event');
+              return;
+            }
+            // Remove from local state immediately
+            setEvents(prev => (prev ?? []).filter(e => e._id !== id));
+          } catch (err) {
+            Alert.alert('Network Error', 'Could not reach server.');
+          }
       }}
     ]);
   }
@@ -311,12 +333,16 @@ export default function EventsScreen() {
         body: JSON.stringify({ reason: postponeReason, newDate: postponeDate.toISOString(), newTime: postponeTime })
       });
       if (res.ok) {
+         const updatedEvent = await res.json();
+         // Update local state immediately
+         setEvents(prev => (prev ?? []).map(e => e._id === postponeEventId ? updatedEvent : e));
          setPostponeModalVisible(false);
          setPostponeReason('');
          setPostponeTime('');
-         fetchEvents();
+         setPostponeEventId(null);
       } else {
-         Alert.alert('Error', 'Failed to postpone event.');
+         const err = await res.json();
+         Alert.alert('Error', err?.error || 'Failed to postpone event.');
       }
     } catch(e) { Alert.alert('Error', 'Network error.'); }
   }

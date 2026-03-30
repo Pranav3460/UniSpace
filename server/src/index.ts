@@ -341,6 +341,7 @@ const UserSchema = new mongoose.Schema({
   name: { type: String },
   phone: { type: String },
   designation: { type: String },
+  department: { type: String, default: '' },
   school: { type: String },
   photoUrl: { type: String },
   role: { type: String, enum: ['student', 'teacher', 'admin'], default: 'student' },
@@ -544,6 +545,7 @@ app.post('/api/login', async (req, res) => {
     name: user.name,
     phone: user.phone,
     designation: user.designation,
+    department: (user as any).department || '',
     school: user.school,
     photoUrl: user.photoUrl,
     role: user.role || 'student', // Fallback for old users
@@ -557,21 +559,22 @@ app.get('/api/user/profile', async (req, res) => {
   if (!email) return res.status(400).json({ error: 'Missing email' });
   const user = await User.findOne({ email });
   if (!user) return res.status(404).json({ error: 'User not found' });
-  res.json({ email: user.email, name: user.name, phone: user.phone, designation: user.designation, school: user.school, photoUrl: user.photoUrl, role: user.role, status: user.status });
+  res.json({ email: user.email, name: user.name, phone: user.phone, designation: user.designation, department: (user as any).department || '', school: user.school, photoUrl: user.photoUrl, role: user.role, status: user.status });
 });
 
 app.patch('/api/user/profile', async (req, res) => {
-  const { email, name, phone, designation, school, photoUrl } = req.body;
+  const { email, name, phone, designation, department, school, photoUrl } = req.body;
   if (!email) return res.status(400).json({ error: 'Missing email' });
   const user = await User.findOne({ email });
   if (!user) return res.status(404).json({ error: 'User not found' });
   if (name !== undefined) user.name = name;
   if (phone !== undefined) user.phone = phone;
   if (designation !== undefined) user.designation = designation;
+  if (department !== undefined) (user as any).department = department;
   if (school !== undefined) user.school = school;
   if (photoUrl !== undefined) user.photoUrl = photoUrl;
   await user.save();
-  res.json({ email: user.email, name: user.name, phone: user.phone, designation: user.designation, school: user.school, photoUrl: user.photoUrl, role: user.role, status: user.status });
+  res.json({ email: user.email, name: user.name, phone: user.phone, designation: user.designation, department: (user as any).department || '', school: user.school, photoUrl: user.photoUrl, role: user.role, status: user.status });
 });
 
 app.post('/api/user/change-password', async (req, res) => {
@@ -1520,10 +1523,32 @@ app.get('/api/admin/analytics', async (req, res) => {
     const recentEvents = await Event.countDocuments({ createdAt: { $gte: thirtyDaysAgo } });
     const recentGroups = await Group.countDocuments({ createdAt: { $gte: thirtyDaysAgo } });
 
+    // Build daily user registration data for last 30 days
+    const userGrowthRaw = await User.aggregate([
+      { $match: { createdAt: { $gte: thirtyDaysAgo } } },
+      {
+        $group: {
+          _id: {
+            year: { $year: '$createdAt' },
+            month: { $month: '$createdAt' },
+            day: { $dayOfMonth: '$createdAt' }
+          },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1 } }
+    ]);
+
+    const userGrowth = userGrowthRaw.map((item: any) => ({
+      date: new Date(item._id.year, item._id.month - 1, item._id.day).toISOString(),
+      count: item.count
+    }));
+
     res.json({
       recentSignups,
       recentEvents,
       recentGroups,
+      userGrowth,
       thirtyDaysAgo
     });
   } catch (err: any) {
@@ -1620,7 +1645,8 @@ async function seedAdmins() {
         name: a.name,
         role: 'admin',
         status: 'approved',
-        designation: 'Administrator',
+        designation: 'Global Admin / Administrator',
+        department: 'Administration',
         school: 'CampusConnect',
         phone: '0000000000'
       });

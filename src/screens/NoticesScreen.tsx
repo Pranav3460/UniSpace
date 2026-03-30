@@ -230,7 +230,7 @@ export default function NoticesScreen() {
                 {[item.department, item.type, item.year].filter(Boolean).join(' • ')}
               </Text>
             </View>
-            {(userProfile?.designation === 'Teacher' || userProfile?.role === 'admin' || item.createdByEmail === email) && (
+            {(userProfile?.role === 'teacher' || userProfile?.role === 'admin' || item.createdByEmail === email) && (
               <TouchableOpacity onPress={() => handleDelete(item._id || item.id || '')} style={{ padding: 8 }}>
                 <Text style={{ fontSize: 18, color: '#ef4444' }}>🗑️</Text>
               </TouchableOpacity>

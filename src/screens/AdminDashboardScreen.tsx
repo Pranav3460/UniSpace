@@ -222,15 +222,22 @@ export default function AdminDashboardScreen({ navigation }: any) {
                         {activeTab === 'Manage' && (
                             <View style={{ gap: 12 }}>
                                 {[
-                                    { title: 'Pending Teacher Requests', icon: 'people-circle-outline', screen: 'AdminTeacherList', color: '#f59e0b' },
-                                    { title: 'Manage Users', icon: 'people-outline', screen: 'AdminTeacherList', color: '#10b981' }, 
-                                    { title: 'Manage Notices', icon: 'newspaper-outline', screen: 'Notices', color: '#3b82f6' },
-                                    { title: 'Manage Groups', icon: 'library-outline', screen: 'Study Groups', color: '#8b5cf6' },
+                                    { title: 'Pending Teacher Requests', icon: 'people-circle-outline', screen: 'AdminTeacherList', color: '#f59e0b', parentNav: false },
+                                    { title: 'Manage Users', icon: 'people-outline', screen: 'AdminTeacherList', color: '#10b981', parentNav: false }, 
+                                    { title: 'Manage Notices', icon: 'newspaper-outline', screen: 'Notices', color: '#3b82f6', parentNav: true },
+                                    { title: 'Manage Groups', icon: 'library-outline', screen: 'Study Groups', color: '#8b5cf6', parentNav: true },
                                 ].map((item, index) => (
                                     <TouchableOpacity key={index} style={[styles.manageCard, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => {
                                         Keyboard.dismiss();
-                                        setTimeout(() => navigation.navigate(item.screen), 100);
+                                        setTimeout(() => {
+                                            if (item.parentNav) {
+                                                navigation.getParent()?.navigate(item.screen);
+                                            } else {
+                                                navigation.navigate(item.screen);
+                                            }
+                                        }, 100);
                                     }}>
+
                                         <View style={[styles.iconContainer, { backgroundColor: item.color + '20' }]}>
                                             <Ionicons name={item.icon as any} size={28} color={item.color} />
                                         </View>

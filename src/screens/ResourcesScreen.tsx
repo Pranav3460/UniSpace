@@ -272,7 +272,7 @@ export default function ResourcesScreen() {
         }
       />
 
-      {isTeacher && (
+      {(isTeacher || isAdmin) && (
         <TouchableOpacity style={styles.fab} onPress={() => navigation.navigate('UploadResource' as any)}>
           <Ionicons name="add" size={30} color="#fff" />
         </TouchableOpacity>

@@ -11,6 +11,7 @@ type UserProfile = {
   name?: string;
   phone?: string;
   designation?: string;
+  department?: string;
   school?: string;
   photoUrl?: string;
   role?: string;

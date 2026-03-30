@@ -1,14 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform, Modal } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE_URL } from '../api/client';
 import { useTheme } from '../context/ThemeContext';
 
-const DESIGNATIONS = ['Student', 'Teacher'];
-const SCHOOLS = ['SOET', 'SOMC', 'SMAS', 'SLAS', 'SOAD'];
+const DESIGNATIONS = [
+  'Student',
+  'Teacher',
+  '1st Year',
+  '2nd Year',
+  '3rd Year',
+  '4th Year',
+  'Professor',
+  'Assistant Professor',
+  'HOD',
+  'Principal',
+  'Global Admin / Administrator',
+];
+
+const SCHOOLS = ['SOET', 'SOMC', 'SMAS', 'SLAS', 'SOAD', 'CampusConnect'];
 
 export default function ProfileEditScreen({ navigation }: any) {
   const { userProfile, email, refreshProfile } = useAuth();
@@ -17,17 +29,29 @@ export default function ProfileEditScreen({ navigation }: any) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [designation, setDesignation] = useState('');
+  const [department, setDepartment] = useState('');
   const [school, setSchool] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Picker modal states
+  const [showDesignationPicker, setShowDesignationPicker] = useState(false);
+  const [showSchoolPicker, setShowSchoolPicker] = useState(false);
 
   useEffect(() => {
     if (userProfile) {
       setName(userProfile.name || '');
       setPhone(userProfile.phone || '');
-      setDesignation(userProfile.designation || '');
+      setDepartment(userProfile.department || '');
       setSchool(userProfile.school || '');
       setPhotoUri(userProfile.photoUrl || null);
+
+      // For admins: default designation to 'Global Admin / Administrator' if not already set
+      const defaultDesignation =
+        userProfile.role === 'admin'
+          ? 'Global Admin / Administrator'
+          : userProfile.designation || '';
+      setDesignation(userProfile.designation || defaultDesignation);
     }
   }, [userProfile]);
 
@@ -96,6 +120,7 @@ export default function ProfileEditScreen({ navigation }: any) {
           name,
           phone,
           designation,
+          department,
           school,
           photoUrl,
         }),
@@ -114,6 +139,96 @@ export default function ProfileEditScreen({ navigation }: any) {
       setSaving(false);
     }
   }
+
+  // Custom picker selector component
+  const PickerField = ({
+    label,
+    value,
+    placeholder,
+    onPress,
+  }: {
+    label: string;
+    value: string;
+    placeholder: string;
+    onPress: () => void;
+  }) => (
+    <View style={styles.pickerContainer}>
+      <Text style={[styles.pickerLabel, { color: colors.subText }]}>{label}</Text>
+      <TouchableOpacity
+        style={[styles.pickerField, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
+        onPress={onPress}
+        activeOpacity={0.7}
+      >
+        <Text style={[styles.pickerFieldText, { color: value ? colors.text : colors.subText }]}>
+          {value || placeholder}
+        </Text>
+        <Ionicons name="chevron-down" size={18} color={colors.subText} />
+      </TouchableOpacity>
+    </View>
+  );
+
+  // Generic options modal
+  const OptionsModal = ({
+    visible,
+    title,
+    options,
+    selected,
+    onSelect,
+    onClose,
+  }: {
+    visible: boolean;
+    title: string;
+    options: string[];
+    selected: string;
+    onSelect: (v: string) => void;
+    onClose: () => void;
+  }) => (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity style={styles.modalBackdrop} onPress={onClose} activeOpacity={1} />
+      <View style={[styles.pickerModal, { backgroundColor: colors.card }]}>
+        <View style={styles.pickerModalHeader}>
+          <Text style={[styles.pickerModalTitle, { color: colors.text }]}>{title}</Text>
+          <TouchableOpacity onPress={onClose}>
+            <Ionicons name="close" size={22} color={colors.subText} />
+          </TouchableOpacity>
+        </View>
+        <ScrollView>
+          {options.map((option) => (
+            <TouchableOpacity
+              key={option}
+              style={[
+                styles.pickerOption,
+                { borderBottomColor: colors.border },
+                selected === option && { backgroundColor: '#3b5bfd' + '18' },
+              ]}
+              onPress={() => {
+                onSelect(option);
+                onClose();
+              }}
+            >
+              <Text
+                style={[
+                  styles.pickerOptionText,
+                  { color: selected === option ? '#3b5bfd' : colors.text },
+                  selected === option && { fontWeight: '700' },
+                ]}
+              >
+                {option}
+              </Text>
+              {selected === option && (
+                <Ionicons name="checkmark" size={18} color="#3b5bfd" />
+              )}
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    </Modal>
+  );
 
   return (
     <View style={[styles.mainContainer, { backgroundColor: colors.background }]}>
@@ -160,39 +275,36 @@ export default function ProfileEditScreen({ navigation }: any) {
               />
             </View>
 
-            <View style={[styles.pickerContainer, { flex: 1 }]}>
-              <Text style={[styles.pickerLabel, { color: colors.subText }]}>Designation *</Text>
-              <View style={[styles.pickerWrapper, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-                <Picker
-                  selectedValue={designation}
-                  onValueChange={setDesignation}
-                  style={[styles.picker, { color: colors.text }]}
-                  dropdownIconColor={colors.text}
-                >
-                  <Picker.Item label="Select..." value="" color={isDark ? '#999' : '#000'} />
-                  {DESIGNATIONS.map((des) => (
-                    <Picker.Item key={des} label={des} value={des} color={isDark ? '#eee' : '#000'} />
-                  ))}
-                </Picker>
+            {/* Designation - Custom themed picker */}
+            <PickerField
+              label="DESIGNATION *"
+              value={designation}
+              placeholder="Select Designation"
+              onPress={() => setShowDesignationPicker(true)}
+            />
+
+            {/* Department - Plain text input */}
+            <View style={styles.pickerContainer}>
+              <Text style={[styles.pickerLabel, { color: colors.subText }]}>DEPARTMENT</Text>
+              <View style={[styles.inputContainer, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                <Ionicons name="school-outline" size={20} color={colors.subText} style={styles.inputIcon} />
+                <TextInput
+                  placeholder="e.g. Computer Science"
+                  placeholderTextColor={colors.subText}
+                  value={department}
+                  onChangeText={setDepartment}
+                  style={[styles.input, { color: colors.text }]}
+                />
               </View>
             </View>
 
-            <View style={[styles.pickerContainer, { flex: 1 }]}>
-              <Text style={[styles.pickerLabel, { color: colors.subText }]}>School/Department *</Text>
-              <View style={[styles.pickerWrapper, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-                <Picker
-                  selectedValue={school}
-                  onValueChange={setSchool}
-                  style={[styles.picker, { color: colors.text }]}
-                  dropdownIconColor={colors.text}
-                >
-                  <Picker.Item label="Select..." value="" color={isDark ? '#999' : '#000'} />
-                  {SCHOOLS.map((sch) => (
-                    <Picker.Item key={sch} label={sch} value={sch} color={isDark ? '#eee' : '#000'} />
-                  ))}
-                </Picker>
-              </View>
-            </View>
+            {/* School - Custom themed picker */}
+            <PickerField
+              label="SCHOOL / COLLEGE *"
+              value={school}
+              placeholder="Select School"
+              onPress={() => setShowSchoolPicker(true)}
+            />
           </View>
 
           <View style={styles.actionContainer}>
@@ -219,6 +331,26 @@ export default function ProfileEditScreen({ navigation }: any) {
 
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Designation Picker Modal */}
+      <OptionsModal
+        visible={showDesignationPicker}
+        title="Select Designation"
+        options={DESIGNATIONS}
+        selected={designation}
+        onSelect={setDesignation}
+        onClose={() => setShowDesignationPicker(false)}
+      />
+
+      {/* School Picker Modal */}
+      <OptionsModal
+        visible={showSchoolPicker}
+        title="Select School"
+        options={SCHOOLS}
+        selected={school}
+        onSelect={setSchool}
+        onClose={() => setShowSchoolPicker(false)}
+      />
     </View>
   );
 }
@@ -279,23 +411,24 @@ const styles = StyleSheet.create({
   },
   inputIcon: { marginRight: 12 },
   input: { flex: 1, fontSize: 16 },
-  pickerContainer: { marginBottom: 4 },
+  pickerContainer: { gap: 6 },
   pickerLabel: { 
     fontSize: 13, 
     fontWeight: '700', 
-    marginBottom: 8, 
     marginLeft: 4, 
     letterSpacing: 0.5, 
     textTransform: 'uppercase' 
   },
-  pickerWrapper: {
+  pickerField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     borderRadius: 16,
     borderWidth: 1,
-    overflow: 'hidden',
+    paddingHorizontal: 16,
     height: 56,
-    justifyContent: 'center',
   },
-  picker: { height: 56 },
+  pickerFieldText: { fontSize: 16, flex: 1 },
   actionContainer: { gap: 12 },
   btn: {
     backgroundColor: '#3b5bfd',
@@ -318,4 +451,40 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   cancelBtnText: { fontWeight: '700', fontSize: 16 },
+  // Modal styles
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  pickerModal: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingBottom: 32,
+    maxHeight: '60%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  pickerModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.08)',
+    marginBottom: 4,
+  },
+  pickerModalTitle: { fontSize: 18, fontWeight: '800' },
+  pickerOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 4,
+    borderBottomWidth: 0.5,
+  },
+  pickerOptionText: { fontSize: 16 },
 });

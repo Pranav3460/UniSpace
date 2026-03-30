@@ -35,34 +35,49 @@ export default function ResourcesScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
-      fetchResources();
+      let mounted = true;
+      fetchResources(mounted);
+      return () => { mounted = false; };
     }, [userProfile?.school, userProfile?.role])
   );
 
   const { socket } = useSocket();
 
   useEffect(() => {
+    let mounted = true;
     if (!socket) return;
-    socket.on('resource:create', (newResource: Resource) => {
+    
+    const handleCreate = (newResource: Resource) => {
+      if (!mounted) return;
       if (isAdmin || !userProfile?.school || !newResource.school || newResource.school === 'All' || newResource.school === userProfile.school) {
         setItems((prev) => [newResource, ...prev]);
       }
-    });
-    return () => {
-      socket.off('resource:create');
     };
-  }, [socket, userProfile]);
+    
+    socket.on('resource:create', handleCreate);
+    return () => {
+      mounted = false;
+      socket.off('resource:create', handleCreate);
+    };
+  }, [socket, userProfile, isAdmin]);
 
-  async function fetchResources() {
+  async function fetchResources(mounted = true) {
     try {
       const schoolQuery = (!isAdmin && userProfile?.school) ? `school=${encodeURIComponent(userProfile.school)}` : '';
       const response = await fetch(`${API_BASE_URL}/api/resources?${schoolQuery}`);
       if (response.ok) {
         const data = await response.json();
-        setItems(data);
+        if (mounted) {
+           setItems(Array.isArray(data) ? data : []);
+        }
+      } else {
+        throw new Error('Failed to fetch');
       }
     } catch (e) {
-      console.error('Failed to fetch resources', e);
+      if (mounted) {
+        console.error('Failed to fetch resources', e);
+        Alert.alert('Network Error', 'Failed to load resources. Showing cached or offline data if available.');
+      }
     }
   }
 
@@ -213,7 +228,6 @@ export default function ResourcesScreen() {
         }}
         ListEmptyComponent={
           <EmptyState 
-            variant="no-data" 
             title="No Resources Found" 
             subtitle="There are currently no resources available matching your criteria." 
             icon={<Ionicons name="folder-open-outline" size={64} color={colors.subText} style={{ opacity: 0.5 }} />}

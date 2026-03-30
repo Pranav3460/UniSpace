@@ -31,12 +31,16 @@ export default function AdminDashboardScreen({ navigation }: any) {
                 fetch(`${API_BASE_URL}/api/admin/stats`),
                 fetch(`${API_BASE_URL}/api/admin/analytics`)
             ]);
-            const s = await statsRes.json();
-            const a = await analyticsRes.json();
-            setStats(s);
-            setAnalytics(a);
+            let s = {};
+            let a = {};
+            if (statsRes.ok) s = await statsRes.json();
+            if (analyticsRes.ok) a = await analyticsRes.json();
+            
+            setStats(s || {});
+            setAnalytics(a || {});
         } catch (e) {
             console.error('Failed to fetch admin stats', e);
+            Alert.alert('Error', 'Failed to fetch analytics from server.');
         } finally {
             setLoading(false);
         }
@@ -149,15 +153,15 @@ export default function AdminDashboardScreen({ navigation }: any) {
                                 </View>
                                 <View style={styles.growthStats}>
                                     <View style={styles.growthStat}>
-                                        <Text style={[styles.growthValue, { color: '#10b981' }]}>+{analytics?.recentSignups}</Text>
+                                        <Text style={[styles.growthValue, { color: '#10b981' }]}>+{analytics?.recentSignups || 0}</Text>
                                         <Text style={{ color: colors.subText, fontSize: 12 }}>New Users</Text>
                                     </View>
                                     <View style={styles.growthStat}>
-                                        <Text style={[styles.growthValue, { color: '#3b82f6' }]}>+{analytics?.recentEvents}</Text>
+                                        <Text style={[styles.growthValue, { color: '#3b82f6' }]}>+{analytics?.recentEvents || 0}</Text>
                                         <Text style={{ color: colors.subText, fontSize: 12 }}>New Events</Text>
                                     </View>
                                     <View style={styles.growthStat}>
-                                        <Text style={[styles.growthValue, { color: '#8b5cf6' }]}>+{analytics?.recentGroups}</Text>
+                                        <Text style={[styles.growthValue, { color: '#8b5cf6' }]}>+{analytics?.recentGroups || 0}</Text>
                                         <Text style={{ color: colors.subText, fontSize: 12 }}>New Groups</Text>
                                     </View>
                                 </View>

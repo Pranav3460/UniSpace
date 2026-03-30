@@ -19,17 +19,22 @@ export default function SearchScreen({ navigation }: any) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
     if (query.trim().length > 1) {
       const timeout = setTimeout(() => {
-        performSearch();
+        performSearch(mounted);
       }, 500);
-      return () => clearTimeout(timeout);
+      return () => {
+        clearTimeout(timeout);
+        mounted = false;
+      };
     } else {
       setResults([]);
+      return () => { mounted = false; };
     }
   }, [query, activeTab]);
 
-  async function performSearch() {
+  async function performSearch(mounted = true) {
     setLoading(true);
     try {
       let endpoint = '';
@@ -40,16 +45,15 @@ export default function SearchScreen({ navigation }: any) {
       const res = await fetch(`${API_BASE_URL}${endpoint}`);
       if (res.ok) {
         let data = await res.json();
-        // If it's events, filter for search term locally if the endpoint doesn't support ?q
         if (activeTab === 'events') {
              data = data.filter((e: any) => e.title.toLowerCase().includes(query.toLowerCase()) || (e.description && e.description.toLowerCase().includes(query.toLowerCase())));
         }
-        setResults(data);
+        if (mounted) setResults(Array.isArray(data) ? data : []);
       }
     } catch (e) {
-      console.error(e);
+      if (mounted) console.error(e);
     } finally {
-      setLoading(false);
+      if (mounted) setLoading(false);
     }
   }
 

@@ -89,80 +89,85 @@ export default function EventsScreen() {
   const { socket } = useSocket();
 
   useEffect(() => {
-    fetchEvents();
-    if (isTeacher || isAdmin) {
-      fetchPendingEvents();
-    }
-  }, [userProfile]);
+    let mounted = true;
 
-  useEffect(() => {
+    async function safeFetch() {
+      if (!mounted) return;
+      await fetchEvents(mounted);
+      if ((isTeacher || isAdmin) && mounted) {
+        await fetchPendingEvents(mounted);
+      }
+    }
+    safeFetch();
+
     if (!socket) return;
     
-    socket.on('event:create', fetchEvents);
+    socket.on('event:create', () => safeFetch());
     socket.on('event:request', () => {
-       if (isAdmin || isTeacher) fetchPendingEvents();
+       if (isAdmin || isTeacher) safeFetch();
     });
-    socket.on('event:update', () => {
-       fetchEvents();
-       if (isAdmin || isTeacher) fetchPendingEvents();
-    });
-    socket.on('event:delete', () => {
-       fetchEvents();
-       if (isAdmin || isTeacher) fetchPendingEvents();
-    });
+    socket.on('event:update', () => safeFetch());
+    socket.on('event:delete', () => safeFetch());
 
     return () => {
-      socket.off('event:create');
-      socket.off('event:request');
-      socket.off('event:update');
-      socket.off('event:delete');
+      mounted = false;
+      if (socket) {
+        socket.off('event:create');
+        socket.off('event:request');
+        socket.off('event:update');
+        socket.off('event:delete');
+      }
     };
-  }, [socket, userProfile]);
+  }, [socket, userProfile, isTeacher, isAdmin]);
 
-  async function fetchEvents() {
+  async function fetchEvents(mounted = true) {
     if (!isAdmin && !userProfile?.school) return;
+    if (!mounted) return;
     setLoading(true);
     try {
       const schoolQuery = (!isAdmin && userProfile?.school) ? `?school=${encodeURIComponent(userProfile.school)}` : '';
       
-      // If student, we can also fetch their personal events to show their status
       let url = `${API_BASE_URL}/api/events${schoolQuery}`;
       const response = await fetch(url);
       if (response.ok) {
         let data = await response.json();
+        if (!Array.isArray(data)) data = [];
         
-        // Let's also fetch student's own requests if they are a student
         if (isStudent && email) {
            const personalRes = await fetch(`${API_BASE_URL}/api/events/user/${encodeURIComponent(email)}`);
            if (personalRes.ok) {
              const personalData = await personalRes.json();
-             // Merge uniquely by _id
-             const merged = [...data, ...personalData];
-             const uniqueMap = new Map();
-             merged.forEach(item => uniqueMap.set(item._id, item));
-             data = Array.from(uniqueMap.values());
+             if (Array.isArray(personalData)) {
+               const merged = [...data, ...personalData];
+               const uniqueMap = new Map();
+               merged.forEach(item => uniqueMap.set(item._id, item));
+               data = Array.from(uniqueMap.values());
+             }
            }
         }
         
-        setEvents(data.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()));
+        if (mounted) setEvents(data.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()));
       }
     } catch (e) {
-      console.error('Failed to fetch events', e);
+      if (mounted) {
+        console.error('Failed to fetch events', e);
+        Alert.alert('Network Error', 'Failed to fetch events. Showing offline data if available.');
+      }
     } finally {
-      setLoading(false);
+      if (mounted) setLoading(false);
     }
   }
 
-  async function fetchPendingEvents() {
+  async function fetchPendingEvents(mounted = true) {
     try {
       const schoolQuery = (!isAdmin && userProfile?.school) ? `?school=${encodeURIComponent(userProfile.school)}` : '';
       const response = await fetch(`${API_BASE_URL}/api/events/pending${schoolQuery}`);
       if (response.ok) {
         const data = await response.json();
-        setPendingEvents(data);
+        if (mounted && Array.isArray(data)) setPendingEvents(data);
       }
     } catch (e) {
-      console.error('Failed to fetch pending events', e);
+      if (mounted) console.error('Failed to fetch pending events', e);
     }
   }
 
@@ -257,8 +262,10 @@ export default function EventsScreen() {
       if (res.ok) {
          fetchPendingEvents();
          fetchEvents();
+      } else {
+         Alert.alert('Error', 'Failed to approve event.');
       }
-    } catch(e) {}
+    } catch(e) { Alert.alert('Error', 'Network error.'); }
   }
 
   async function executeReject() {
@@ -277,8 +284,10 @@ export default function EventsScreen() {
          setRejectEventId(null);
          fetchPendingEvents();
          fetchEvents();
+      } else {
+         Alert.alert('Error', 'Failed to reject event.');
       }
-    } catch(e) {}
+    } catch(e) { Alert.alert('Error', 'Network error.'); }
   }
 
   async function deleteEvent(id: string) {
@@ -306,8 +315,10 @@ export default function EventsScreen() {
          setPostponeReason('');
          setPostponeTime('');
          fetchEvents();
+      } else {
+         Alert.alert('Error', 'Failed to postpone event.');
       }
-    } catch(e) {}
+    } catch(e) { Alert.alert('Error', 'Network error.'); }
   }
 
   const getTypeColor = (type: string) => {

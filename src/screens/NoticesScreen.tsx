@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, FlatList, TextInput, StyleSheet, TouchableOpacity, Modal, RefreshControl } from 'react-native';
+import { View, Text, FlatList, TextInput, StyleSheet, TouchableOpacity, Modal, RefreshControl, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE_URL } from '../api/client';
@@ -38,42 +38,48 @@ export default function NoticesScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
-      fetchNotices();
+      let mounted = true;
+      fetchNotices(mounted);
+      return () => { mounted = false; };
     }, [])
   );
 
   useEffect(() => {
+    let mounted = true;
     if (!socket) return;
 
     socket.on('notice:create', (newNotice: Notice) => {
-      setItems((prev) => [newNotice, ...prev]);
+      if (mounted) setItems((prev) => [newNotice, ...prev]);
     });
 
     socket.on('notice:delete', (deletedId: string) => {
-      setItems((prev) => prev.filter((item) => (item._id || item.id) !== deletedId));
+      if (mounted) setItems((prev) => prev.filter((item) => (item._id || item.id) !== deletedId));
     });
 
     return () => {
+      mounted = false;
       socket.off('notice:create');
       socket.off('notice:delete');
     };
   }, [socket]);
 
-  async function fetchNotices() {
+  async function fetchNotices(mounted = true) {
     try {
       const response = await fetch(`${API_BASE_URL}/api/notices`);
       if (response.ok) {
         const data = await response.json();
-        setItems(data);
+        if (mounted) setItems(Array.isArray(data) ? data : []);
+      } else {
+        throw new Error('Failed');
       }
     } catch (e) {
-      console.error('Failed to fetch notices', e);
+      if (mounted) console.error('Failed to fetch notices', e);
     }
   }
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchNotices();
+    await fetchNotices(true);
     setRefreshing(false);
   };
 
@@ -101,24 +107,35 @@ export default function NoticesScreen() {
         setTargetAudience('All');
         setTargetYear('All Years');
         setNoticeType('General');
-        fetchNotices();
+        fetchNotices(true);
+      } else {
+        Alert.alert('Error', 'Failed to publish notice.');
       }
     } catch (e) {
       console.error('Failed to create notice', e);
+      Alert.alert('Network Error', 'Failed to save notice.');
     }
   }
 
   async function handleDelete(id: string) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/notices/${id}`, {
-        method: 'DELETE',
-      });
-      if (response.ok) {
-        setItems((prev) => prev.filter((item) => (item._id || item.id) !== id));
-      }
-    } catch (e) {
-      console.error('Failed to delete notice', e);
-    }
+    Alert.alert('Delete Notice', 'Are you sure you want to delete this notice?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+          try {
+            const response = await fetch(`${API_BASE_URL}/api/notices/${id}`, {
+              method: 'DELETE',
+            });
+            if (response.ok) {
+              setItems((prev) => prev.filter((item) => (item._id || item.id) !== id));
+            } else {
+              Alert.alert('Error', 'Failed to delete notice.');
+            }
+          } catch (e) {
+            console.error('Failed to delete notice', e);
+            Alert.alert('Network Error', 'Could not reach server.');
+          }
+      }}
+    ]);
   }
 
   const filteredItems = useMemo(() => {

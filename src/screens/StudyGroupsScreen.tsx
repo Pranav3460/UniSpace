@@ -71,7 +71,7 @@ export default function StudyGroupsScreen({ navigation }: any) {
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('group:create', (newGroup: Group) => {
+    const handleGroupCreate = (newGroup: Group) => {
       if (newGroup.status === 'Pending') {
         if (isTeacher && userProfile?.school === newGroup.school) {
           setPendingGroups((prev) => [newGroup, ...prev]);
@@ -81,9 +81,9 @@ export default function StudyGroupsScreen({ navigation }: any) {
       } else {
         setGroups((prev) => [newGroup, ...prev]);
       }
-    });
+    };
 
-    socket.on('group:update', (updatedGroup: Group) => {
+    const handleGroupUpdate = (updatedGroup: Group) => {
       // Update in pending list
       setPendingGroups((prev) => {
         const index = prev.findIndex((g) => g._id === updatedGroup._id);
@@ -123,7 +123,7 @@ export default function StudyGroupsScreen({ navigation }: any) {
         fetchGroupDetails(updatedGroup._id).then(() => {
           // Check if we are still a member
           // Note: updatedGroup from socket might not have populated members, so we rely on the fetch above or check the ID list if available
-          const isStillMember = updatedGroup.members?.some(m => (typeof m === 'string' ? m === email : m.email === email));
+          const isStillMember = (updatedGroup.members ?? []).some(m => (typeof m === 'string' ? m === email : m.email === email));
           const isAdmin = userProfile?.role === 'admin';
           if (updatedGroup.members && !isStillMember && !isAdmin && activeGroup._id === updatedGroup._id) {
             Alert.alert('Removed', 'You have been removed from this group.');
@@ -133,9 +133,9 @@ export default function StudyGroupsScreen({ navigation }: any) {
           }
         });
       }
-    });
+    };
 
-    socket.on('group:delete', (deletedId: string) => {
+    const handleGroupDelete = (deletedId: string) => {
       setPendingGroups((prev) => prev.filter((g) => g._id !== deletedId));
       setGroups((prev) => prev.filter((g) => g._id !== deletedId));
       if (activeGroup && activeGroup._id === deletedId) {
@@ -143,12 +143,16 @@ export default function StudyGroupsScreen({ navigation }: any) {
         setInfoVisible(false);
         setActiveGroup(null);
       }
-    });
+    };
+
+    socket.on('group:create', handleGroupCreate);
+    socket.on('group:update', handleGroupUpdate);
+    socket.on('group:delete', handleGroupDelete);
 
     return () => {
-      socket.off('group:create');
-      socket.off('group:update');
-      socket.off('group:delete');
+      socket.off('group:create', handleGroupCreate);
+      socket.off('group:update', handleGroupUpdate);
+      socket.off('group:delete', handleGroupDelete);
     };
   }, [socket, isTeacher, userProfile, email, activeGroup]);
 
@@ -306,23 +310,20 @@ export default function StudyGroupsScreen({ navigation }: any) {
 
   // Helper to check if user is a member (handles both string[] and Member[])
   const isMember = (group: Group) => {
-    if (!group.members) return false;
-    return group.members.some(m => (typeof m === 'string' ? m === email : m.email === email));
+    return (group?.members ?? []).some(m => (typeof m === 'string' ? m === email : m.email === email));
   };
 
   const isAdmin = (group: Group) => {
     if (userProfile?.role === 'admin') return true; // Global Admin override
-
-    if (group.admins && group.admins.length > 0) {
-      return group.admins.includes(email || '');
+    if ((group?.admins ?? []).length > 0) {
+      return (group?.admins ?? []).includes(email || '');
     }
     // Fallback for older groups or if admins array is empty
-    return group.createdByEmail === email;
+    return group?.createdByEmail === email;
   };
 
   const isPending = (group: Group) => {
-    if (!group.joinRequests) return false;
-    return group.joinRequests.some(m => (typeof m === 'string' ? m === email : m.email === email));
+    return (group?.joinRequests ?? []).some(m => (typeof m === 'string' ? m === email : m.email === email));
   };
 
   // Dynamic Styles
@@ -369,10 +370,10 @@ export default function StudyGroupsScreen({ navigation }: any) {
       </TouchableOpacity>
 
       {/* Pending Approvals Section (Teachers Only) */}
-      {isTeacher && pendingGroups.length > 0 && (
+      {isTeacher && (pendingGroups ?? []).length > 0 && (
         <View style={[styles.pendingSection, dynamicStyles.pendingSection]}>
           <Text style={[styles.sectionTitle, dynamicStyles.sectionTitle]}>Pending Approvals</Text>
-          {pendingGroups.map((group) => (
+          {(pendingGroups ?? []).map((group) => (
             <View key={group._id} style={[styles.pendingCard, dynamicStyles.pendingCard]}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.cardTitle, dynamicStyles.cardTitle]}>{group.name}</Text>
@@ -459,7 +460,7 @@ export default function StudyGroupsScreen({ navigation }: any) {
 
                 <View style={styles.avatarRow}>
                   {/* In list view, members is likely string[] */}
-                  {item.members?.slice(0, 5).map((m, i) => (
+                  {(item.members ?? []).slice(0, 5).map((m, i) => (
                     <View key={i} style={styles.avatarBubble}>
                       <Text style={styles.avatarText}>
                         {(typeof m === 'string' ? m : m.name).charAt(0).toUpperCase()}

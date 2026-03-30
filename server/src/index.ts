@@ -747,6 +747,24 @@ app.patch('/api/groups/:id/approve', async (req, res) => {
   res.json(g);
 });
 
+app.delete('/api/groups/:id', async (req, res) => {
+  const { requester } = req.query as any;
+  const group = await Group.findById(req.params.id);
+  if (!group) return res.status(404).json({ error: 'Not found' });
+
+  // verify requester is global admin or group creator
+  const requesterUser = await User.findOne({ email: requester });
+  const isGlobalAdmin = requesterUser?.role === 'admin';
+  
+  if (!isGlobalAdmin && group.createdByEmail !== requester) {
+    return res.status(403).json({ error: 'Only the creator or admin can delete this group.' });
+  }
+
+  await Group.findByIdAndDelete(req.params.id);
+  io.emit('group:delete', req.params.id);
+  res.json({ success: true });
+});
+
 app.post('/api/groups/:id/join', async (req, res) => {
   const { email } = req.body;
   // Add to joinRequests instead of members directly

@@ -1,6 +1,6 @@
 // src/screens/GroupChatScreen.tsx
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, KeyboardAvoidingView, Platform, Alert, Image, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, KeyboardAvoidingView, Platform, Alert, Image, TouchableOpacity, ScrollView } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useSocket } from '../context/SocketContext';
@@ -9,6 +9,7 @@ import { TabBar, Input, Button, Avatar, FAB, EmptyState, SkeletonLoader, BottomS
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import { formatRelativeTime, formatFullDate } from '../utils/dateUtils';
 
 type GroupData = any; // Will structure properly
 
@@ -30,7 +31,45 @@ export default function GroupChatScreen({ route, navigation }: any) {
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
-    navigation.setOptions({ title: groupName || 'Group Chat' });
+    const headerRight = () => {
+      const isCreator = group?.createdByEmail === email;
+      const isGlobalAdmin = userProfile?.role === 'admin';
+      return (
+        <View style={{ flexDirection: 'row', gap: 12, marginRight: 8 }}>
+          <TouchableOpacity onPress={() => {
+            Alert.alert(
+              'Leave Group',
+              'Leave this group? You will need to request to join again.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Leave', style: 'destructive', onPress: handleLeave }
+              ]
+            );
+          }}>
+            <Ionicons name="exit-outline" size={24} color="#ef4444" />
+          </TouchableOpacity>
+          {(isCreator || isGlobalAdmin) && (
+            <TouchableOpacity onPress={() => {
+              Alert.alert(
+                'Delete Group',
+                'Are you sure? This will delete all messages and data permanently.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Delete', style: 'destructive', onPress: handleDelete }
+                ]
+              );
+            }}>
+              <Ionicons name="trash-outline" size={24} color="#ef4444" />
+            </TouchableOpacity>
+          )}
+        </View>
+      );
+    };
+
+    navigation.setOptions({ 
+      title: groupName || 'Group Chat',
+      headerRight: group ? headerRight : undefined
+    });
     fetchGroupDetails();
 
     if (socket) {
@@ -91,6 +130,155 @@ export default function GroupChatScreen({ route, navigation }: any) {
       });
     } catch (e) {
       console.warn('Failed to mark attendance', e);
+    }
+  };
+
+  const handlePromote = async (targetEmail: string) => {
+    const backupGroup = { ...group };
+    setGroup((prev: any) => prev ? { ...prev, admins: [...(prev.admins ?? []), targetEmail] } : prev);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/groups/${groupId}/members/promote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: targetEmail, requesterEmail: email })
+      });
+      if (!res.ok) throw new Error('Failed to promote');
+    } catch (e) {
+      setGroup(backupGroup);
+      Alert.alert('Error', 'Failed to promote member.');
+    }
+  };
+
+  const handleDemote = async (targetEmail: string) => {
+    const backupGroup = { ...group };
+    setGroup((prev: any) => prev ? { ...prev, admins: (prev.admins ?? []).filter((a: string) => a !== targetEmail) } : prev);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/groups/${groupId}/members/demote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: targetEmail, requesterEmail: email })
+      });
+      if (!res.ok) throw new Error('Failed to demote');
+    } catch (e) {
+      setGroup(backupGroup);
+      Alert.alert('Error', 'Failed to demote member.');
+    }
+  };
+
+  const handleRemove = async (targetEmail: string) => {
+    const backupGroup = { ...group };
+    setGroup((prev: any) => prev ? { ...prev, members: (prev.members ?? []).filter((m: any) => typeof m === 'string' ? m !== targetEmail : m.email !== targetEmail) } : prev);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/groups/${groupId}/members/${encodeURIComponent(targetEmail)}?requesterEmail=${encodeURIComponent(email ?? '')}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Failed to remove');
+    } catch (e) {
+      setGroup(backupGroup);
+      Alert.alert('Error', 'Failed to remove member.');
+    }
+  };
+
+  const handleLeave = async () => {
+    if (!email) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/groups/${groupId}/leave`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      if (res.ok) {
+        navigation.goBack();
+      } else {
+        Alert.alert('Error', 'Failed to leave group.');
+      }
+    } catch (e) {
+      Alert.alert('Error', 'An error occurred.');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!email) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/groups/${groupId}?requester=${encodeURIComponent(email)}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        navigation.goBack();
+      } else {
+        Alert.alert('Error', 'Failed to delete group.');
+      }
+    } catch (e) {
+      Alert.alert('Error', 'An error occurred.');
+    }
+  };
+
+  const processMemberAction = (item: any) => {
+    if (!isAdmin()) return; // Must be admin
+    
+    const targetEmail = item.email || item;
+    const isMe = targetEmail === email;
+    if (isMe) return; // Can't act on yourself here
+    
+    const isGroupCreator = group?.createdByEmail === email;
+    const isGlobalAdmin = userProfile?.role === 'admin';
+    const targetIsAdmin = (group?.admins ?? []).includes(targetEmail);
+    const targetIsCreator = group?.createdByEmail === targetEmail;
+    
+    if (targetIsCreator && !isGlobalAdmin) return; // Can't touch creator
+
+    const options: any[] = [];
+    
+    if (isGroupCreator || isGlobalAdmin) {
+      if (targetIsAdmin) {
+        options.push({ text: 'Demote to Member', onPress: () => handleDemote(targetEmail) });
+      } else {
+        options.push({ text: 'Promote to Admin', onPress: () => handlePromote(targetEmail) });
+      }
+    }
+    
+    options.push({ text: 'Remove from Group', style: 'destructive', onPress: () => handleRemove(targetEmail) });
+    options.push({ text: 'Cancel', style: 'cancel' });
+    
+    Alert.alert('Manage Member', `What would you like to do with ${item.name || targetEmail}?`, options);
+  };
+
+  const handleJoinRequest = async (targetEmail: string, action: 'approve' | 'reject') => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/groups/${groupId}/join-requests/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: targetEmail, requesterEmail: email })
+      });
+      if (!res.ok) throw new Error(`Failed to ${action} request`);
+      
+      // Optimistic update
+      setGroup((prev: any) => {
+        if (!prev) return prev;
+        const newReqs = (prev.joinRequests ?? []).filter((r: any) => typeof r === 'string' ? r !== targetEmail : r.email !== targetEmail);
+        let newMembers = prev.members;
+        if (action === 'approve') {
+          // just push email string optimistically
+          newMembers = [...(prev.members ?? []), targetEmail];
+        }
+        return { ...prev, joinRequests: newReqs, members: newMembers };
+      });
+    } catch (e) {
+      Alert.alert('Error', `Failed to ${action} join request.`);
+    }
+  };
+
+  const handleVote = async (pollId: string, optionIndex: number) => {
+    if (!email) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/groups/${groupId}/polls/${pollId}/vote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, optionIndex })
+      });
+      if (!res.ok) throw new Error('Failed to vote');
+    } catch (e) {
+      Alert.alert('Error', 'Failed to submit vote.');
     }
   };
 
@@ -179,7 +367,7 @@ export default function GroupChatScreen({ route, navigation }: any) {
           <View style={{ flex: 1 }}>
             <FlatList
               ref={flatListRef}
-              data={group.messages || []}
+              data={(group?.messages ?? [])}
               keyExtractor={(m) => m._id}
               contentContainerStyle={styles.chatList}
               onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
@@ -229,28 +417,30 @@ export default function GroupChatScreen({ route, navigation }: any) {
         return (
           <View style={{ flex: 1 }}>
             <FlatList
-              data={group.sessions || []}
+              data={(group?.sessions ?? [])}
               keyExtractor={(s) => s._id}
               contentContainerStyle={{ padding: 16 }}
               renderItem={({ item }) => {
-                const attended = item.attendees?.includes(email);
-                const isLive = item.status === 'live';
+                const attended = (item?.attendees ?? []).includes(email);
+                const isLive = item?.status === 'live';
+                const sessionDate = item?.date ? formatFullDate(item.date) : 'No date set';
                 return (
                   <View style={[styles.itemCard, { backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.md, borderColor: theme.colors.cardBorder }]}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <Text style={[styles.itemTitle, { color: theme.colors.text, fontSize: theme.typography.size.lg, marginBottom: 0 }]}>{item.title}</Text>
+                      <Text style={[styles.itemTitle, { color: theme.colors.text, fontSize: theme.typography.size.lg, marginBottom: 0 }]}>{item?.title}</Text>
                       {isLive && (
                         <View style={{ backgroundColor: '#ef4444', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
                           <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>LIVE</Text>
                         </View>
                       )}
                     </View>
-                    <Text style={{ color: theme.colors.subText }}>Status: {item.status.toUpperCase()}</Text>
-                    <Text style={{ color: theme.colors.subText, marginTop: 4 }}>Host: {item.hostUser}</Text>
+                    <Text style={{ color: theme.colors.subText }}>Status: {(item?.status ?? 'UPCOMING').toUpperCase()}</Text>
+                    <Text style={{ color: theme.colors.subText, marginTop: 4 }}>Date: {sessionDate}</Text>
+                    <Text style={{ color: theme.colors.subText, marginTop: 4 }}>Host: {item?.hostUser}</Text>
                     
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: theme.colors.cardBorder }}>
                       <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '600' }}>
-                        <Ionicons name="people" size={14} color={theme.colors.subText} /> Attendance: {item.attendees?.length || 0}
+                        <Ionicons name="people" size={14} color={theme.colors.subText} /> Attendance: {(item?.attendees ?? []).length}
                       </Text>
                       
                       {isLive && !attended && (
@@ -261,7 +451,7 @@ export default function GroupChatScreen({ route, navigation }: any) {
                           <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold' }}>Mark Present</Text>
                         </TouchableOpacity>
                       )}
-                      {(item.status === 'completed' || attended) && (
+                      {(item?.status === 'completed' || attended) && (
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                           {attended ? (
                             <Ionicons name="checkmark-circle" size={16} color="#10b981" />
@@ -288,15 +478,25 @@ export default function GroupChatScreen({ route, navigation }: any) {
         return (
           <View style={{ flex: 1 }}>
              <FlatList
-              data={group.notes || []}
+              data={(group?.notes ?? [])}
               keyExtractor={(n) => n._id}
               contentContainerStyle={{ padding: 16 }}
-              renderItem={({ item }) => (
-                <View style={[styles.itemCard, { backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.md, borderColor: theme.colors.cardBorder }]}>
-                  <Text style={[styles.itemTitle, { color: theme.colors.text, fontSize: theme.typography.size.lg }]}>{item.title}</Text>
-                  <Text style={{ color: theme.colors.subText }} numberOfLines={2}>{item.content}</Text>
-                </View>
-              )}
+              renderItem={({ item }) => {
+                const tagsRaw = item?.tags ?? [];
+                // if it's an array of strings
+                const tags = Array.isArray(tagsRaw) ? tagsRaw.join(', ') : '';
+                const editedAt = item?.lastUpdatedAt ? formatRelativeTime(item.lastUpdatedAt) : '';
+                return (
+                  <View style={[styles.itemCard, { backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.md, borderColor: theme.colors.cardBorder }]}>
+                    <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
+                       <Text style={[styles.itemTitle, { color: theme.colors.text, fontSize: theme.typography.size.lg }]}>{item?.title}</Text>
+                       {editedAt ? <Text style={{ color: theme.colors.subText, fontSize: 12 }}>{editedAt}</Text> : null}
+                    </View>
+                    {tags ? <Text style={{ color: theme.colors.primary, fontSize: 12, marginBottom: 6 }}>{tags}</Text> : null}
+                    <Text style={{ color: theme.colors.subText }} numberOfLines={2}>{item?.content ?? ''}</Text>
+                  </View>
+                );
+              }}
               ListEmptyComponent={<EmptyState icon={<Ionicons name="document-text-outline" size={48} color={theme.colors.subText} />} title="No Shared Notes" subtitle="Collaborate on notes with your group." />}
             />
              <FAB icon={<Ionicons name="add" size={24} color="#FFF" />} onPress={() => {}} />
@@ -306,18 +506,27 @@ export default function GroupChatScreen({ route, navigation }: any) {
         return (
           <View style={{ flex: 1 }}>
              <FlatList
-              data={group.polls || []}
+              data={(group?.polls ?? [])}
               keyExtractor={(p) => p._id}
               contentContainerStyle={{ padding: 16 }}
               renderItem={({ item }) => (
                 <View style={[styles.itemCard, { backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.md, borderColor: theme.colors.cardBorder }]}>
-                  <Text style={[styles.itemTitle, { color: theme.colors.text, fontSize: theme.typography.size.lg, fontWeight: '700' }]}>{item.question}</Text>
-                  {item.options.map((opt: any, idx: number) => (
-                    <TouchableOpacity key={idx} style={[styles.pollOption, { backgroundColor: theme.colors.inputBg, borderRadius: theme.borderRadius.sm }]}>
-                      <Text style={{ color: theme.colors.text }}>{opt.text}</Text>
-                      <Text style={{ color: theme.colors.primary, fontWeight: 'bold' }}>{opt.votes.length}</Text>
-                    </TouchableOpacity>
-                  ))}
+                  {item?.question && <Text style={[styles.itemTitle, { color: theme.colors.text, fontSize: theme.typography.size.lg, fontWeight: '700' }]}>{item.question}</Text>}
+                  {(item?.options ?? []).map((opt: any, idx: number) => {
+                    const totalVotes = (item?.options ?? []).reduce((sum: number, o: any) => sum + (o?.votes ?? []).length, 0);
+                    const optVotes = (opt?.votes ?? []).length;
+                    const percent = totalVotes > 0 ? Math.round((optVotes / totalVotes) * 100) : 0;
+                    return (
+                      <TouchableOpacity 
+                        key={idx} 
+                        style={[styles.pollOption, { backgroundColor: theme.colors.inputBg, borderRadius: theme.borderRadius.sm }]}
+                        onPress={() => handleVote(item._id, idx)}
+                      >
+                        <Text style={{ color: theme.colors.text, flex: 1 }}>{opt?.text}</Text>
+                        <Text style={{ color: theme.colors.primary, fontWeight: 'bold' }}>{percent}% ({optVotes})</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               )}
               ListEmptyComponent={<EmptyState icon={<Ionicons name="stats-chart-outline" size={48} color={theme.colors.subText} />} title="No Polls" subtitle="Ask the group a question." />}
@@ -327,24 +536,59 @@ export default function GroupChatScreen({ route, navigation }: any) {
         );
       case 'members':
         return (
-          <FlatList
-            data={group.members || []}
-            keyExtractor={(m) => m._id || m.email || m}
-            contentContainerStyle={{ padding: 16 }}
-            renderItem={({ item }) => {
+          <ScrollView style={{ flex: 1, padding: 16 }}>
+            {isAdmin() && (group?.joinRequests ?? []).length > 0 && (
+              <View style={{ marginBottom: 24 }}>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: theme.colors.text, marginBottom: 12 }}>Join Requests ({(group?.joinRequests ?? []).length})</Text>
+                {(group?.joinRequests ?? []).map((reqItem: any, idx: number) => {
+                  const reqEmail = reqItem.email || reqItem;
+                  const reqName = reqItem.name || reqEmail;
+                  return (
+                    <View key={idx} style={[styles.memberRow, { borderBottomColor: theme.colors.cardBorder, justifyContent: 'space-between' }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                        <Avatar name={reqName} src={reqItem.photoUrl} size="md" />
+                        <View style={{ marginLeft: 12, flex: 1 }}>
+                          <Text style={{ color: theme.colors.text, fontWeight: '600' }} numberOfLines={1}>{reqName}</Text>
+                        </View>
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                         <TouchableOpacity onPress={() => handleJoinRequest(reqEmail, 'approve')} style={{ backgroundColor: '#10b981', paddingHorizontal: 12, paddingVertical: 6, borderRadius: theme.borderRadius.sm }}>
+                            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 12 }}>Approve</Text>
+                         </TouchableOpacity>
+                         <TouchableOpacity onPress={() => handleJoinRequest(reqEmail, 'reject')} style={{ backgroundColor: '#ef4444', paddingHorizontal: 12, paddingVertical: 6, borderRadius: theme.borderRadius.sm }}>
+                            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 12 }}>Reject</Text>
+                         </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
+            <Text style={{ fontSize: 16, fontWeight: '700', color: theme.colors.text, marginBottom: 12 }}>Members ({(group?.members ?? []).length})</Text>
+            {(group?.members ?? []).map((item: any, idx: number) => {
               const memberName = item.name || item.email || item;
-              const isGroupAdmin = group.admins.includes(item.email || item);
+              const isGroupAdmin = (group?.admins ?? []).includes(item.email || item);
+              const isCreator = group?.createdByEmail === (item.email || item);
+              const displayRole = isCreator ? 'Creator' : (isGroupAdmin ? 'Admin' : null);
               return (
-                <View style={[styles.memberRow, { borderBottomColor: theme.colors.cardBorder }]}>
+                <TouchableOpacity 
+                  key={idx}
+                  style={[styles.memberRow, { borderBottomColor: theme.colors.cardBorder }]}
+                  onPress={() => processMemberAction(item)}
+                  activeOpacity={isAdmin() ? 0.7 : 1}
+                >
                   <Avatar name={memberName} src={item.photoUrl} size="md" />
                   <View style={{ flex: 1, marginLeft: 12 }}>
                     <Text style={{ color: theme.colors.text, fontWeight: '600' }}>{memberName}</Text>
-                    {isGroupAdmin && <Text style={{ color: theme.colors.primary, fontSize: 12 }}>Admin</Text>}
+                    {displayRole && (
+                       <Text style={{ color: theme.colors.primary, fontSize: 12, fontWeight: 'bold' }}>{displayRole}</Text>
+                    )}
                   </View>
-                </View>
+                </TouchableOpacity>
               );
-            }}
-          />
+            })}
+          </ScrollView>
         );
       default: return null;
     }

@@ -673,5 +673,5 @@ Strict protocols efficiently logically smoothly effectively structurally dynamic
 ## 21. License & Credits
 Application functionally reliably optimally intuitively organically accurately reliably automatically cleanly optimally securely intelligently correctly seamlessly perfectly creatively beautifully flawlessly fluidly completely safely elegantly effectively flawlessly automatically elegantly stably intelligently smartly seamlessly functionally creatively precisely dynamically strictly confidently smoothly practically smoothly structurally safely dynamically effectively correctly natively simply visually carefully flawlessly smoothly fluently visually gracefully fluidly nicely cleanly natively practically organically natively confidently nicely successfully. 
 
-Built beautifully effectively effectively precisely creatively elegantly.
+Built beautifully effectively precisely creatively elegantly by Team Rocket🚀.
 ```

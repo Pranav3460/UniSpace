@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert, Dimensions, Keyboard } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE_URL } from '../api/client';
@@ -98,7 +98,10 @@ export default function AdminDashboardScreen({ navigation }: any) {
                         <TouchableOpacity 
                             key={tab} 
                             style={[styles.tab, activeTab === tab && styles.activeTab, { borderBottomColor: activeTab === tab ? '#3b5bfd' : 'transparent' }]}
-                            onPress={() => setActiveTab(tab)}
+                            onPress={() => {
+                                Keyboard.dismiss();
+                                setActiveTab(tab);
+                            }}
                         >
                             <Text style={[styles.tabText, activeTab === tab && styles.activeTabText, { color: activeTab === tab ? '#3b5bfd' : colors.subText }]}>{tab}</Text>
                         </TouchableOpacity>
@@ -147,10 +150,40 @@ export default function AdminDashboardScreen({ navigation }: any) {
 
                         {activeTab === 'Analytics' && (
                             <View style={[styles.analyticsSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 16 }]}>Last 30 Days Growth</Text>
-                                <View style={styles.chartPlaceholder}>
-                                    <Text style={{ color: '#9ca3af', fontWeight: '600' }}>[ Growth Chart Visualization ]</Text>
-                                </View>
+                                <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 16 }]}>User Registrations — Last 30 Days</Text>
+                                {(() => {
+                                    let growthData = analytics?.userGrowth ?? [];
+                                    if (growthData.length === 0) {
+                                        const now = new Date();
+                                        growthData = Array.from({length: 7}).map((_, i) => {
+                                            const d = new Date(now);
+                                            d.setDate(d.getDate() - (6 - i));
+                                            return { date: d.toISOString(), count: 0 };
+                                        });
+                                    }
+                                    const maxCount = Math.max(...growthData.map((d: any) => d.count ?? 0), 1);
+                                    
+                                    return (
+                                        <View style={[styles.chartContainer, { borderColor: colors.border }]}>
+                                            {analytics?.userGrowth && analytics.userGrowth.length === 0 ? (
+                                                <Text style={{ color: colors.subText, fontWeight: '600', position: 'absolute', alignSelf: 'center', top: 80 }}>No data yet</Text>
+                                            ) : null}
+                                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'flex-end', paddingHorizontal: 16, height: 160, paddingBottom: 10 }}>
+                                                {growthData.map((item: any, index: number) => {
+                                                    const barHeight = ((item.count ?? 0) / maxCount) * 120;
+                                                    const label = new Date(item.date).toLocaleDateString('en', { month: 'short', day: 'numeric' });
+                                                    return (
+                                                        <View key={index} style={styles.barWrapper}>
+                                                            <Text style={[styles.barValue, { color: '#3b5bfd' }]}>{item.count ?? 0}</Text>
+                                                            <View style={[styles.bar, { height: Math.max(barHeight, 4) }]} />
+                                                            <Text style={[styles.barLabel, { color: colors.subText }]}>{label}</Text>
+                                                        </View>
+                                                    )
+                                                })}
+                                            </ScrollView>
+                                        </View>
+                                    );
+                                })()}
                                 <View style={styles.growthStats}>
                                     <View style={styles.growthStat}>
                                         <Text style={[styles.growthValue, { color: '#10b981' }]}>+{analytics?.recentSignups || 0}</Text>
@@ -192,9 +225,12 @@ export default function AdminDashboardScreen({ navigation }: any) {
                                     { title: 'Pending Teacher Requests', icon: 'people-circle-outline', screen: 'AdminTeacherList', color: '#f59e0b' },
                                     { title: 'Manage Users', icon: 'people-outline', screen: 'AdminTeacherList', color: '#10b981' }, 
                                     { title: 'Manage Notices', icon: 'newspaper-outline', screen: 'Notices', color: '#3b82f6' },
-                                    { title: 'Manage Groups', icon: 'library-outline', screen: 'StudyGroups', color: '#8b5cf6' },
+                                    { title: 'Manage Groups', icon: 'library-outline', screen: 'Study Groups', color: '#8b5cf6' },
                                 ].map((item, index) => (
-                                    <TouchableOpacity key={index} style={[styles.manageCard, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => navigation.navigate(item.screen)}>
+                                    <TouchableOpacity key={index} style={[styles.manageCard, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => {
+                                        Keyboard.dismiss();
+                                        setTimeout(() => navigation.navigate(item.screen), 100);
+                                    }}>
                                         <View style={[styles.iconContainer, { backgroundColor: item.color + '20' }]}>
                                             <Ionicons name={item.icon as any} size={28} color={item.color} />
                                         </View>
@@ -207,7 +243,10 @@ export default function AdminDashboardScreen({ navigation }: any) {
 
                         {activeTab === 'Users' && (
                             <View>
-                                <TouchableOpacity style={[styles.manageCard, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => navigation.navigate('AdminTeacherList')}>
+                                <TouchableOpacity style={[styles.manageCard, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => {
+                                    Keyboard.dismiss();
+                                    setTimeout(() => navigation.navigate('AdminTeacherList'), 100);
+                                }}>
                                     <View style={[styles.iconContainer, { backgroundColor: '#10b981' + '20' }]}>
                                         <Ionicons name="people" size={28} color="#10b981" />
                                     </View>
@@ -248,7 +287,11 @@ const styles = StyleSheet.create({
     iconContainer: { width: 50, height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
     manageTitle: { flex: 1, fontSize: 16, fontWeight: '700' },
     analyticsSection: { padding: 20, borderRadius: 16, borderWidth: 1, marginBottom: 20 },
-    chartPlaceholder: { height: 180, backgroundColor: '#f3f4f6', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderWidth: 1, borderColor: '#e5e7eb', borderStyle: 'dashed' },
+    chartContainer: { height: 180, borderRadius: 12, justifyContent: 'flex-end', marginBottom: 20, borderWidth: 1, borderStyle: 'dashed', overflow: 'hidden' },
+    barWrapper: { alignItems: 'center', marginHorizontal: 6, width: 40 },
+    bar: { width: 28, backgroundColor: '#3b5bfd', borderRadius: 4 },
+    barLabel: { fontSize: 10, marginTop: 4 },
+    barValue: { fontSize: 10, marginBottom: 2 },
     growthStats: { flexDirection: 'row', justifyContent: 'space-around' },
     growthStat: { alignItems: 'center' },
     growthValue: { fontSize: 24, fontWeight: '800', marginBottom: 4 },

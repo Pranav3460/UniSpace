@@ -173,6 +173,7 @@ const NoticeSchema = new mongoose.Schema(
     type: String, // Exam, Event, General
     content: String,
     attachmentUrl: String,
+    createdByEmail: { type: String, default: '' },
     createdAt: { type: Date, default: Date.now },
   },
   { timestamps: true }
@@ -365,31 +366,39 @@ app.post('/api/notices', async (req, res) => {
 });
 
 app.delete('/api/notices/:id', async (req, res) => {
-  const { id } = req.params;
-  const { requesterEmail } = req.query as any;
+  try {
+    const { id } = req.params;
+    const { requesterEmail } = req.query as any;
 
-  // Check if admin
-  let isAdmin = false;
-  if (requesterEmail) {
-    const u = await User.findOne({ email: requesterEmail });
-    if (u && u.role === 'admin') isAdmin = true;
+    if (!requesterEmail) {
+      return res.status(400).json({ error: 'requesterEmail is required' });
+    }
+
+    const requester = await User.findOne({ email: requesterEmail });
+    if (!requester) {
+      return res.status(403).json({ error: 'User not found' });
+    }
+
+    const notice = await Notice.findById(id) as any;
+    if (!notice) {
+      return res.status(404).json({ error: 'Notice not found' });
+    }
+
+    const isAdmin = requester.role === 'admin';
+    const isTeacher = requester.role === 'teacher';
+    const isCreator = notice.createdByEmail === requesterEmail;
+
+    if (!isAdmin && !isTeacher && !isCreator) {
+      return res.status(403).json({ error: 'Not authorized to delete this notice' });
+    }
+
+    await Notice.findByIdAndDelete(id);
+    io.emit('notice:delete', id);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('Delete notice error:', err);
+    return res.status(500).json({ error: 'Server error' });
   }
-
-  // If not admin, you might want check ownership (if notices track author)
-  // For now, let's assume if it's not admin, we might restrict? 
-  // The original code didn't restrict delete at all! It was open! 
-  // I will keep it open for now but add admin explicitly allows it (redundant but safe)
-  // OR ideally, we restrict it to admin OR author properly later.
-  // Requirement says: "Admin can delete any notice".
-
-  // Improvement: Add ownership check? The schema doesn't seem to have `createdBy`.
-  // So current behavior is ANYONE can delete? That's dangerous.
-  // I will leave it as is but assume Admin uses this same endpoint.
-
-  const deleted = await Notice.findByIdAndDelete(id);
-  if (!deleted) return res.status(404).json({ error: 'Not found' });
-  io.emit('notice:delete', id); // Emit event
-  res.json({ ok: true });
 });
 
 app.get('/api/lostfound', async (_req, res) => {
@@ -436,6 +445,35 @@ app.post('/api/resources', async (req, res) => {
   const created = await Resource.create(req.body);
   io.emit('resource:create', created); // Emit event
   res.status(201).json(created);
+});
+
+app.delete('/api/resources/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { requesterEmail } = req.query as any;
+
+    if (!requesterEmail) return res.status(400).json({ error: 'requesterEmail required '});
+
+    const requester = await User.findOne({ email: requesterEmail });
+    if (!requester) return res.status(403).json({ error: 'Not found' });
+
+    const resource = await Resource.findById(id) as any;
+    if (!resource) return res.status(404).json({ error: 'Resource not found' });
+
+    const isAdmin = requester.role === 'admin';
+    const isCreator = resource.uploadedByEmail === requesterEmail;
+
+    if (!isAdmin && !isCreator) {
+       return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    await Resource.findByIdAndDelete(id);
+    io.emit('resource:delete', id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Delete resource error:', err);
+    res.status(500).json({ error: 'Server error '});
+  }
 });
 
 // Simple auth endpoints (signup/login) for demo purposes

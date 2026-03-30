@@ -17,6 +17,7 @@ type Notice = {
   type?: string;
   content?: string;
   createdAt?: string;
+  createdByEmail?: string;
 };
 
 export default function NoticesScreen() {
@@ -118,17 +119,18 @@ export default function NoticesScreen() {
   }
 
   async function handleDelete(id: string) {
-    Alert.alert('Delete Notice', 'Are you sure you want to delete this notice?', [
+    Alert.alert('Delete Notice', 'Are you sure you want to delete this notice? This cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
           try {
-            const response = await fetch(`${API_BASE_URL}/api/notices/${id}`, {
+            const response = await fetch(`${API_BASE_URL}/api/notices/${id}?requesterEmail=${encodeURIComponent(email || '')}`, {
               method: 'DELETE',
             });
             if (response.ok) {
               setItems((prev) => prev.filter((item) => (item._id || item.id) !== id));
             } else {
-              Alert.alert('Error', 'Failed to delete notice.');
+              const err = await response.json();
+              Alert.alert('Error', err?.error || 'Failed to delete notice.');
             }
           } catch (e) {
             console.error('Failed to delete notice', e);
@@ -228,7 +230,7 @@ export default function NoticesScreen() {
                 {[item.department, item.type, item.year].filter(Boolean).join(' • ')}
               </Text>
             </View>
-            {(userProfile?.designation === 'Teacher' || userProfile?.role === 'admin') && (
+            {(userProfile?.designation === 'Teacher' || userProfile?.role === 'admin' || item.createdByEmail === email) && (
               <TouchableOpacity onPress={() => handleDelete(item._id || item.id || '')} style={{ padding: 8 }}>
                 <Text style={{ fontSize: 18, color: '#ef4444' }}>🗑️</Text>
               </TouchableOpacity>

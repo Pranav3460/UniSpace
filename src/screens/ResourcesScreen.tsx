@@ -19,6 +19,7 @@ type Resource = {
   thumbnailUrl?: string;
   downloads?: number;
   uploadedByName?: string;
+  uploadedByEmail?: string;
   createdAt: string;
 };
 
@@ -54,12 +55,41 @@ export default function ResourcesScreen() {
       }
     };
     
+    const handleDeleteEvent = (deletedId: string) => {
+      if (!mounted) return;
+      setItems((prev) => prev.filter((item) => item._id !== deletedId));
+    };
+
     socket.on('resource:create', handleCreate);
+    socket.on('resource:delete', handleDeleteEvent);
     return () => {
       mounted = false;
       socket.off('resource:create', handleCreate);
+      socket.off('resource:delete', handleDeleteEvent);
     };
   }, [socket, userProfile, isAdmin]);
+
+  async function handleDelete(id: string) {
+    Alert.alert('Delete Resource', 'Are you sure you want to delete this resource?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+          try {
+            const response = await fetch(`${API_BASE_URL}/api/resources/${id}?requesterEmail=${encodeURIComponent(userProfile?.email || '')}`, {
+              method: 'DELETE',
+            });
+            if (response.ok) {
+              setItems((prev) => prev.filter((item) => item._id !== id));
+            } else {
+              const err = await response.json();
+              Alert.alert('Error', err?.error || 'Failed to delete resource');
+            }
+          } catch (e) {
+            console.error('Failed to delete resource', e);
+            Alert.alert('Network Error', 'Could not reach server.');
+          }
+      }}
+    ]);
+  }
 
   async function fetchResources(mounted = true) {
     try {
@@ -215,12 +245,19 @@ export default function ResourcesScreen() {
                     )}
                   </View>
 
-                  <TouchableOpacity 
-                    onPress={() => handleOpenLink(item)} 
-                    style={[styles.actionBtn, { backgroundColor: typeColor }]}
-                  >
-                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>Open</Text>
-                  </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+                    {(isAdmin || item.uploadedByEmail === userProfile?.email) && (
+                      <TouchableOpacity onPress={() => handleDelete(item._id)} style={{ padding: 6 }}>
+                        <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity 
+                      onPress={() => handleOpenLink(item)} 
+                      style={[styles.actionBtn, { backgroundColor: typeColor }]}
+                    >
+                      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>Open</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
             </View>

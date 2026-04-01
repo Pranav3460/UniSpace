@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Animated, StyleSheet } from 'react-native';
+import { nativeDriver } from '../utils/animations';
 import { useSocket } from '../context/SocketContext';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -12,8 +13,8 @@ export default function LiveConnectionBadge() {
       // Pulse animation when connected securely
       Animated.loop(
         Animated.sequence([
-          Animated.timing(opacity, { toValue: 0.4, duration: 1000, useNativeDriver: true }),
-          Animated.timing(opacity, { toValue: 1, duration: 1000, useNativeDriver: true })
+          Animated.timing(opacity, { toValue: 0.4, duration: 1000, useNativeDriver: nativeDriver }),
+          Animated.timing(opacity, { toValue: 1, duration: 1000, useNativeDriver: nativeDriver })
         ])
       ).start();
     } else {

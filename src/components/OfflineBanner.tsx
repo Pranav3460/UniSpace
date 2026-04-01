@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
+import { nativeDriver } from '../utils/animations';
 import NetInfo from '@react-native-community/netinfo';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,13 +23,13 @@ export default function OfflineBanner() {
       Animated.timing(slideAnim, {
         toValue: 0,
         duration: 300,
-        useNativeDriver: true,
+        useNativeDriver: nativeDriver,
       }).start();
     } else {
       Animated.timing(slideAnim, {
         toValue: -100,
         duration: 300,
-        useNativeDriver: true,
+        useNativeDriver: nativeDriver,
       }).start();
     }
   }, [isConnected]);

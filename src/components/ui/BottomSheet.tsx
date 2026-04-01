@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, Modal, Pressable, Animated as RNAnimated, PanResponder, Dimensions, ViewStyle } from 'react-native';
+import { nativeDriver } from '../../utils/animations';
 import { useTheme } from '../../context/ThemeContext';
 import { BlurView } from 'expo-blur'; // Assuming expo-blur is available or standard View fallback
 
@@ -43,13 +44,13 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
             RNAnimated.parallel([
                 RNAnimated.spring(translateY, {
                     toValue: 0,
-                    useNativeDriver: true,
+                    useNativeDriver: nativeDriver,
                     bounciness: 4,
                 }),
                 RNAnimated.timing(fadeOpacity, {
                     toValue: 1,
                     duration: 300,
-                    useNativeDriver: true,
+                    useNativeDriver: nativeDriver,
                 })
             ]).start();
         } else {
@@ -62,12 +63,12 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
             RNAnimated.timing(translateY, {
                 toValue: SCREEN_HEIGHT,
                 duration: 250,
-                useNativeDriver: true,
+                useNativeDriver: nativeDriver,
             }),
             RNAnimated.timing(fadeOpacity, {
                 toValue: 0,
                 duration: 250,
-                useNativeDriver: true,
+                useNativeDriver: nativeDriver,
             })
         ]).start(() => setModalVisible(false));
     };
@@ -92,7 +93,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                     // Snap back
                     RNAnimated.spring(translateY, {
                         toValue: 0,
-                        useNativeDriver: true,
+                        useNativeDriver: nativeDriver,
                         bounciness: 4,
                     }).start();
                 }

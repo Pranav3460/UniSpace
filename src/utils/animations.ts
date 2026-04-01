@@ -1,4 +1,11 @@
 import { withSpring, withTiming, Easing, withSequence, withRepeat } from 'react-native-reanimated';
+import { Platform } from 'react-native';
+
+/**
+ * useNativeDriver is only supported on iOS/Android.
+ * On web it must be false to avoid the "native animated module is missing" warning.
+ */
+export const nativeDriver = Platform.OS !== 'web';
 
 export const springConfig = {
     damping: 15,

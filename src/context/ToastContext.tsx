@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
+import { nativeDriver } from '../utils/animations';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
@@ -27,9 +28,9 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
   const showToast = useCallback(({ message, type = 'info' }: ToastOptions) => {
     setToast({ message, type });
     Animated.sequence([
-      Animated.timing(opacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: 300, useNativeDriver: nativeDriver }),
       Animated.delay(4000),
-      Animated.timing(opacity, { toValue: 0, duration: 300, useNativeDriver: true })
+      Animated.timing(opacity, { toValue: 0, duration: 300, useNativeDriver: nativeDriver })
     ]).start(() => {
       setToast(null);
     });

@@ -24,7 +24,7 @@ export default function GetStartedScreen({ navigation }: any) {
 
         <TouchableOpacity 
           style={styles.btn} 
-          onPress={() => navigation.replace('Main')}
+          onPress={() => navigation.navigate('Login')}
           activeOpacity={0.8}
         >
           <Text style={styles.btnText}>Get Started</Text>

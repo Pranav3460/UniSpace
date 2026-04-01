@@ -57,7 +57,7 @@
 - ⚙️ **Rich Settings** — User-driven modular notification systems, granular profile privacy control (hidden/public), extensive theme customizability, and GDPR-compliant data exportation JSON facilities.
 - 📴 **Connection Resilience** — Proactive internet disruption detection via `NetInfo`, prompting an automatic slide-down `OfflineBanner`.
 
----
+----
 
 ## 2. Features
 

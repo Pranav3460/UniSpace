@@ -44,7 +44,8 @@ export default function LoginScreen({ navigation }: any) {
           isDesktop && styles.cardDesktop,
           isDesktop && { backgroundColor: colors.card, borderColor: colors.border }
         ]}>
-          <Text style={styles.header}>Login to CampusConnect</Text>
+          <Text style={[styles.header, { color: colors.text }]}>Login to UniSpace</Text>
+          
           <View style={styles.heroWrap}>
             <Image
               source={COLLEGE_IMG}

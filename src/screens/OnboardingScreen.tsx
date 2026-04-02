@@ -9,7 +9,7 @@ const { width, height } = Dimensions.get('window');
 const SLIDES = [
   {
     id: '1',
-    title: 'Welcome to CampusConnect',
+    title: 'Welcome to UniSpace',
     description: 'The ultimate academic hub. Stay updated with critical notices and events instantly.',
     icon: '🚀'
   },

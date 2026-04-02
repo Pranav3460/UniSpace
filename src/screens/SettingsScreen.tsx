@@ -185,7 +185,7 @@ export default function SettingsScreen() {
         <View style={{ marginLeft: 12, flex: 1 }}>
           <Text style={[styles.name, { color: colors.text }]}>{userProfile?.name || email || 'Guest User'}</Text>
           <Text style={[styles.sub, { color: colors.subText }]}>
-            {userProfile?.designation || 'Member'} • {userProfile?.school || 'CampusConnect'}
+            {userProfile?.designation || 'Member'} • {userProfile?.school || 'UniSpace'}
           </Text>
         </View>
         <TouchableOpacity style={[styles.editBtn, { backgroundColor: isDark ? '#374151' : '#eaf0ff' }]} onPress={() => navigation.navigate('ProfileEdit')}>

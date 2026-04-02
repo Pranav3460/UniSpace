@@ -99,7 +99,7 @@ export const CustomDrawerContent: React.FC<DrawerContentComponentProps> = (props
                 </Pressable>
                 
                 <Text style={[styles.versionText, { color: theme.colors.subText, fontSize: theme.typography.size.xs }]}>
-                    CampusConnect v1.0.0
+                    UniSpace v1.0.0
                 </Text>
             </View>
         </DrawerContentScrollView>

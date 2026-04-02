@@ -114,8 +114,7 @@ export default function SignupScreen({ navigation }: any) {
           {COLLEGE_IMG && <Image source={COLLEGE_IMG} style={[styles.hero, isDesktop && styles.heroDesktop]} resizeMode="cover" />}
           
           <Text style={[styles.title, { color: colors.text }]}>Create an Account</Text>
-          <Text style={[styles.subtitle, { color: colors.subText }]}>Join the CampusConnect community today.</Text>
-
+          <Text style={[styles.subtitle, { color: colors.subText }]}>Join the UniSpace community today.</Text>
           <TouchableOpacity style={styles.photoContainer} onPress={pickImage} activeOpacity={0.8}>
             {photoUri ? (
               <Image source={{ uri: photoUri }} style={styles.photoPreview} />

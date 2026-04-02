@@ -77,18 +77,20 @@ export default function UploadResourceScreen({ navigation }: any) {
       return;
     }
 
-    // Native path: dynamically import the document picker to avoid loading native-only module on web
+    // Native path: use expo-document-picker (compatible with RN 0.81+)
     try {
-      const DocumentPicker = (await import('react-native-document-picker')).default;
-      const res = await DocumentPicker.pickSingle({ type: DocumentPicker.types.allFiles });
+      const DocumentPicker = await import('expo-document-picker');
+      const res = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
+      if (res.canceled || !res.assets || res.assets.length === 0) return;
+      const asset = res.assets[0];
       setUploading(true);
 
       // Upload to backend
       const formData = new FormData();
       formData.append('file', {
-        uri: res.uri,
-        name: res.name || `resource-${Date.now()}`,
-        type: res.type || 'application/octet-stream',
+        uri: asset.uri,
+        name: asset.name || `resource-${Date.now()}`,
+        type: asset.mimeType || 'application/octet-stream',
       } as any);
 
       const uploadResponse = await fetch(`${API_BASE_URL}/api/upload`, {
@@ -103,8 +105,6 @@ export default function UploadResourceScreen({ navigation }: any) {
         Alert.alert('Error', 'Failed to upload file');
       }
     } catch (e: any) {
-      // DocumentPicker throws a special error on cancel — check shape dynamically
-      if (e && e.code === 'DOCUMENT_PICKER_CANCELED') return;
       Alert.alert('Error', e?.message || 'Upload failed');
     } finally {
       setUploading(false);

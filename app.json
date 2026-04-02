@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "CampusConnectCur",
+    "name": "UniSpace",
     "slug": "CampusConnectCur",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -29,6 +29,11 @@
     },
     "plugins": [
       "expo-video"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "94755987-33c4-4d64-9881-422b1303feeb"
+      }
+    }
   }
 }

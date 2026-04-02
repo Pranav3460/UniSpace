@@ -20,7 +20,7 @@ const DESIGNATIONS = [
   'Global Admin / Administrator',
 ];
 
-const SCHOOLS = ['SOET', 'SOMC', 'SMAS', 'SLAS', 'SOAD', 'CampusConnect'];
+const SCHOOLS = ['SOET', 'SOMC', 'SMAS', 'SLAS', 'SOAD', 'UniSpace'];
 
 export default function ProfileEditScreen({ navigation }: any) {
   const { userProfile, email, refreshProfile } = useAuth();

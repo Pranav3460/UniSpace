@@ -20,6 +20,7 @@ const allowedOrigins = [
   'http://localhost:8081',
   'http://localhost:8082',
   'https://campusconnect-web.onrender.com',
+  'https://unispace-web.onrender.com',
 ];
 
 app.use(

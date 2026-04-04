@@ -59,7 +59,7 @@ export default function ReportFoundScreen({ navigation }: any) {
       });
       navigation.goBack();
     } catch (error: any) {
-      console.error('Failed to submit lost item', error);
+      console.error('Failed to submit the lost item', error);
       Alert.alert('Submission failed', error?.message || 'Could not save your report.');
     } finally {
       setSubmitting(false);

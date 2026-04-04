@@ -15,7 +15,7 @@ export default function RejectedScreen() {
                 <Text style={[styles.title, { color: colors.text }]}>Account Rejected</Text>
                 <Text style={[styles.message, { color: colors.subText }]}>
                     Your account request has been rejected by the administrators.
-                    You cannot access this application.
+                    You cannot access this application right now.
                 </Text>
 
                 <TouchableOpacity style={styles.logoutBtn} onPress={signOut}>

@@ -74,7 +74,7 @@ export default function SignupScreen({ navigation }: any) {
 
   async function doSignup() {
     if (!email || !password) return Alert.alert('Missing Fields', 'Please provide email and password');
-    if (!name || !phone || !designation || !school) return Alert.alert('Missing Fields', 'Please fill in all required fields');
+    if (!name || !phone || !designation || !school) return Alert.alert('Missing Fields', 'Please fill in all the required fields');
 
     setUploading(true);
     try {

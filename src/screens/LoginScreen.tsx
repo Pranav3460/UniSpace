@@ -64,7 +64,7 @@ export default function LoginScreen({ navigation }: any) {
           />
           <View style={styles.passwordContainer}>
             <TextInput
-              placeholder="Password"
+              placeholder="Password "
               placeholderTextColor={colors.subText}
               value={password}
               onChangeText={setPassword}
